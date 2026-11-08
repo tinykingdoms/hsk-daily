@@ -7,6 +7,15 @@
 python tools/check.py
 """
 
+import sys
+
+# 윈도우 콘솔 코드페이지에 따라 한글 출력이 깨지거나 터진다. 출력만 UTF-8 로 고정한다.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 import json
 import re
 import sys
