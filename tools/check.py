@@ -14,7 +14,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = ROOT / "tools"
-DATA = ROOT / "data"
+# 폴더를 넘기면 그 폴더만 본다. 새 문항을 합치기 전에 따로 돌려 볼 때 쓴다.
+DATA = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "data"
+PARTIAL = DATA != ROOT / "data"
 
 MAX_LEVEL = 5
 
@@ -149,7 +151,8 @@ def check_chinese(where, text):
 def load(name):
     path = DATA / name
     if not path.exists():
-        fail(name, "파일이 없다")
+        if not PARTIAL:
+            fail(name, "파일이 없다")
         return None
     return json.loads(path.read_text("utf-8"))
 

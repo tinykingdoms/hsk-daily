@@ -26,8 +26,10 @@ export function bestAnswer(item, mine) {
 }
 
 export function gradeOrder(item, mine) {
-  const ok = item.answers.some((a) => a.length === mine.length && a.every((v, i) => mine[i] === v));
-  return { ok, target: bestAnswer(item, mine) };
+  const which = item.answers.findIndex(
+    (a) => a.length === mine.length && a.every((v, i) => mine[i] === v)
+  );
+  return { ok: which !== -1, which, target: bestAnswer(item, mine) };
 }
 
 function tokens(item, list, flags) {
@@ -43,7 +45,7 @@ function flagBtn(id, flagged) {
 }
 
 function orderCard(item, mine, flagged) {
-  const { ok, target } = gradeOrder(item, mine);
+  const { ok, which, target } = gradeOrder(item, mine);
   const mism = target.map((v, i) => mine[i] !== v);
   const first = mism.indexOf(true);
   const parts = target
@@ -55,8 +57,13 @@ function orderCard(item, mine, flagged) {
     })
     .join("");
 
+  const alt =
+    ok && which > 0
+      ? `<p class="lead" style="margin:12px 0 0">이 순서도 맞습니다. 아래 문장은 같은 뜻으로 가장 흔히 쓰는 형태입니다.</p>`
+      : "";
+
   const diff = ok
-    ? ""
+    ? alt
     : `<div class="diff">
         <div class="diff-row"><span>내 답</span><div class="diff-seq zh" lang="zh-CN">${tokens(
           item,
