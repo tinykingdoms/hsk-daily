@@ -1,0 +1,17 @@
+{
+  "name": "HSK 5급 데일리",
+  "short_name": "HSK 5급",
+  "description": "HSK 3.0 5급 읽기와 쓰기를 평일에 조금씩 연습하는 드릴",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#16181c",
+  "theme_color": "#16181c",
+  "lang": "ko",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
