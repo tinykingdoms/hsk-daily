@@ -59,7 +59,7 @@ function orderCard(item, mine, flagged) {
 
   const alt =
     ok && which > 0
-      ? `<p class="lead" style="margin:12px 0 0">이 순서도 맞습니다. 아래 문장은 같은 뜻으로 가장 흔히 쓰는 형태입니다.</p>`
+      ? `<p class="lead" style="margin:12px 0 0">이 순서도 맞습니다. 맨 위에 적힌 문장이 같은 뜻으로 가장 흔히 쓰는 형태입니다.</p>`
       : "";
 
   const diff = ok
