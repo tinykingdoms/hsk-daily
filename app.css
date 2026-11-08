@@ -216,7 +216,8 @@ button:disabled { opacity: 0.45; cursor: default; }
 }
 
 .slot-row .chunk { background: var(--accent-soft); border-color: transparent; }
-.chunk.used { visibility: hidden; }
+/* 감추면 자리가 비어 줄이 들쭉날쭉해진다. 흐리게 두면 아래 줄이 그대로 있다 */
+.chunk.used { opacity: 0.25; }
 
 /* ---------------------------------------------------------------- 단락 배열 */
 .seq-slots {
