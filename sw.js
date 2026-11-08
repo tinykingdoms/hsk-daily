@@ -1,6 +1,6 @@
 // 지하철에서도 열리도록 앱 껍데기와 문항 파일을 캐시에 둔다.
 // 문항을 고치면 CACHE 를 올려야 새 파일이 내려간다.
-const CACHE = "hsk-daily-5";
+const CACHE = "hsk-daily-6";
 
 const SHELL = [
   "./",
