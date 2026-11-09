@@ -1,5 +1,14 @@
 """단어 등급 조회.  python tools/level.py 变成 改成 区域 ..."""
 
+import sys
+
+# 윈도우 콘솔 코드페이지에 따라 한글과 한자 출력이 터진다. 출력만 UTF-8 로 고정한다.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 import json
 import sys
 from pathlib import Path
