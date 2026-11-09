@@ -195,7 +195,7 @@ export function renderResult(set, ans, flags) {
       <div class="score"><strong>${got} / ${total}</strong><span>단락 ${seqHits}/5 · 어순 ${ordHits}/${
       set.order.length
     } · 빈칸 ${clzHits}/${set.cloze.blanks.length}</span></div>
-      <p class="hint">틀린 문항은 3일 뒤에 다시 나옵니다. 또 틀리면 7일 뒤에 나옵니다.</p>
+      <p class="hint">같은 문항은 다시 나오지 않습니다. 자주 틀리는 어법은 다른 문장으로 먼저 나옵니다.</p>
     </section>`,
     `<section class="block">
       <div class="block-head"><h2>단락 배열</h2></div>
@@ -217,7 +217,7 @@ export function renderResult(set, ans, flags) {
     </section>`);
   }
   out.push(`<div class="row-btns">
-    <button type="button" data-act="retry">다시 풀기</button>
+    <button type="button" class="primary-btn" data-act="next-set">한 세트 더 풀기</button>
     <button type="button" data-act="record">기록 보기</button>
   </div>`);
   return out.join("");

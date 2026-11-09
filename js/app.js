@@ -1,5 +1,5 @@
-import { load, save, schedule, bumpStat, dateKey } from "./store.js";
-import { buildDay } from "./daily.js";
+import { load, save, bumpStat, dateKey, markSeen, recordSet, setsToday } from "./store.js";
+import { buildDay, seedSeen } from "./daily.js";
 import { renderDrill, buildView, emptyAnswers, isComplete, countCjk, esc } from "./drill.js";
 import { renderResult, gradeOrder, gradeSequence, gradeCloze } from "./explain.js";
 
@@ -30,6 +30,12 @@ async function boot() {
     return;
   }
   state = load();
+  // 예전 기록에는 본 문항 목록이 없다. 한 번만 채워 넣는다.
+  if (!Object.keys(state.seen).length && Object.keys(state.days).length) {
+    state.seen = seedSeen(data, state);
+    delete state.review;
+    save(state);
+  }
   startDay();
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
@@ -48,9 +54,11 @@ function today() {
 
 function startDay() {
   const now = today();
-  set = buildDay(data, state, now);
-  view = buildView(set);
-  ans = emptyAnswers(set);
+  set = buildDay(data, state, now, setsToday(state, dateKey(now)));
+  if (!set.exhausted) {
+    view = buildView(set);
+    ans = emptyAnswers(set);
+  }
   route = "drill";
   render();
 }
@@ -58,9 +66,11 @@ function startDay() {
 function header() {
   const now = today();
   const bits = [`${now.getMonth() + 1}월 ${now.getDate()}일 ${WEEK[now.getDay()]}요일`];
-  bits.push(`${set.total}문항`);
-  if (set.writing) bits.push("쓰기 포함");
-  if (set.review.length) bits.push(`복습 ${set.review.length}개`);
+  if (!set.exhausted) {
+    if (set.nth > 1) bits.push(`${set.nth}번째 세트`);
+    bits.push(`${set.total}문항`);
+    if (set.writing) bits.push("쓰기 포함");
+  }
   dayLine.textContent = bits.join(" · ");
 }
 
@@ -69,6 +79,8 @@ function render() {
   header();
   if (route === "record") {
     main.innerHTML = recordView();
+  } else if (set.exhausted) {
+    main.innerHTML = exhaustedView();
   } else if (route === "result") {
     main.innerHTML = renderResult(set, ans, state.flags);
   } else if (set.weekend && !forceWeekday) {
@@ -97,35 +109,55 @@ function render() {
 }
 
 function grade() {
-  const key = set.key;
-  // 같은 날을 다시 풀면 복습 일정은 갱신하되 통계는 첫 번째만 센다
-  const first = !(key in state.days);
+  // 같은 세트를 다시 풀면 점수는 덮어쓰되 어법 통계는 첫 번째 것만 센다.
+  const first = !(set.id in state.sets);
   let got = 0;
 
-  const seqHits = gradeSequence(set.sequence, ans.sequence);
-  const seqOk = seqHits.every(Boolean);
-  got += seqHits.filter(Boolean).length;
-  schedule(state, set.sequence.id, "sequence", !seqOk, key);
+  got += gradeSequence(set.sequence, ans.sequence).filter(Boolean).length;
 
   for (const it of set.order) {
     const ok = gradeOrder(it, ans.order[it.id]).ok;
     if (ok) got += 1;
-    schedule(state, it.id, "order", !ok, key);
     if (first) bumpStat(state, it.grammar, ok);
   }
 
-  let clzAllOk = true;
   for (const b of set.cloze.blanks) {
-    const ok = gradeCloze(b, ans.cloze[b.no]);
-    if (ok) got += 1;
-    else clzAllOk = false;
+    if (gradeCloze(b, ans.cloze[b.no])) got += 1;
   }
-  schedule(state, set.cloze.id, "cloze", !clzAllOk, key);
 
-  state.days[key] = { got, total: set.total, at: Date.now() };
+  if (first) {
+    markSeen(
+      state,
+      [set.sequence.id, set.cloze.id, set.writing && set.writing.id, ...set.order.map((it) => it.id)],
+      set.key
+    );
+  }
+  recordSet(state, set.id, set.key, got, set.total);
   save(state);
   route = "result";
   render();
+}
+
+function leftCount() {
+  const seen = state.seen;
+  const n = (list) => list.filter((x) => !seen[x.id]).length;
+  return {
+    sequence: n(data.sequence.sets),
+    order: n(data.order.items),
+    cloze: n(data.cloze.passages),
+  };
+}
+
+function exhaustedView() {
+  return `<section class="block">
+    <div class="block-head"><h2>남은 문항이 없습니다</h2></div>
+    <p class="hint">준비된 문항을 전부 풀었습니다. 새로 낼 것이 없습니다.</p>
+    <div class="note-box"><p>본 문항을 다시 열 수는 있습니다. 다만 해설을 읽은 문항이라 답이 기억날 겁니다. 새 문항을 넣는 쪽이 낫습니다.</p></div>
+    <div class="row-btns">
+      <button type="button" data-act="record">기록 보기</button>
+      <button type="button" data-act="reopen">본 문항 다시 열기</button>
+    </div>
+  </section>`;
 }
 
 function recordView() {
@@ -159,13 +191,17 @@ function recordView() {
        <div class="row-btns"><button type="button" data-act="copy-flags">신고 목록 복사</button></div>`
     : `<p class="empty">신고한 문항이 없습니다.</p>`;
 
+  const setCount = Object.keys(state.sets).length;
+  const left = leftCount();
+
   return `<section class="block">
-    <div class="block-head"><h2>푼 날</h2><span class="counter">${days.length}일</span></div>
+    <div class="block-head"><h2>푼 날</h2><span class="counter">${days.length}일 · 세트 ${setCount}개</span></div>
     ${
       rows
         ? `<table class="stat-table"><thead><tr><th>날짜</th><th>맞음</th><th>문항</th><th>정답률</th></tr></thead><tbody>${rows}</tbody></table>`
         : `<p class="empty">아직 기록이 없습니다.</p>`
     }
+    <p class="hint">남은 문항은 단락 ${left.sequence}세트, 어순 ${left.order}문항, 빈칸 ${left.cloze}지문입니다.</p>
   </section>
   <section class="block">
     <div class="block-head"><h2>어법별 정답률</h2><span class="counter">어순 문항만</span></div>
@@ -181,7 +217,7 @@ function recordView() {
   </section>
   <section class="block">
     <div class="block-head"><h2>기록 옮기기</h2></div>
-    <div class="note-box"><p>기록은 이 기기의 브라우저에만 쌓입니다. PC와 폰은 따로 쌓입니다.</p></div>
+    <div class="note-box"><p>기록은 이 기기의 브라우저에만 쌓입니다. PC와 폰은 따로 쌓입니다. 한 번 나온 문항은 다시 나오지 않으니, 기기를 옮길 때는 내보내기로 가져가세요.</p></div>
     <div class="row-btns">
       <button type="button" data-act="export">내보내기</button>
       <button type="button" data-act="import">가져오기</button>
@@ -216,13 +252,20 @@ main.addEventListener("click", (e) => {
     if (!isComplete(set, ans)) return;
     grade();
     return;
-  } else if (act === "retry") {
-    ans = emptyAnswers(set);
-    route = "drill";
   } else if (act === "record") {
     route = "record";
+  } else if (act === "reopen") {
+    if (!confirm("이미 푼 문항이 다시 나옵니다. 계속할까요?")) return;
+    state.seen = {};
+    save(state);
+    startDay();
+    return;
+  } else if (act === "next-set") {
+    startDay();
+    window.scrollTo(0, 0);
+    return;
   } else if (act === "back") {
-    route = set.key in state.days ? "result" : "drill";
+    route = set.id in state.sets ? "result" : "drill";
   } else if (act === "anyway") {
     forceWeekday = true;
   } else if (act === "flag") {
@@ -264,7 +307,7 @@ function copy(text, btn) {
 }
 
 document.getElementById("navRecord").addEventListener("click", () => {
-  route = route === "record" ? (set.key in state.days ? "result" : "drill") : "record";
+  route = route === "record" ? (set.id in state.sets ? "result" : "drill") : "record";
   render();
 });
 
