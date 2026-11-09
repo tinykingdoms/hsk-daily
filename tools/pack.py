@@ -37,9 +37,17 @@ def main():
         print("\n검증이 통과하지 않았다. publish/ 를 만들지 않는다.")
         return 1
 
+    # 폴더를 다른 프로그램이 잡고 있으면 지우지 못한다. 그때는 안을 비우고 쓴다.
     if OUT.exists():
-        shutil.rmtree(OUT)
-    OUT.mkdir()
+        try:
+            shutil.rmtree(OUT)
+        except OSError:
+            for child in OUT.iterdir():
+                if child.is_dir():
+                    shutil.rmtree(child, ignore_errors=True)
+                else:
+                    child.unlink(missing_ok=True)
+    OUT.mkdir(exist_ok=True)
 
     for f in FILES:
         shutil.copy2(ROOT / f, OUT / f)
