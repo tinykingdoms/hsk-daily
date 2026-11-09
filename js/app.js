@@ -82,7 +82,7 @@ function render() {
   } else if (set.exhausted) {
     main.innerHTML = exhaustedView();
   } else if (route === "result") {
-    main.innerHTML = renderResult(set, ans, state.flags);
+    main.innerHTML = renderResult(set, ans, state.flags, view);
   } else if (set.weekend && !forceWeekday) {
     main.innerHTML = `<section class="block">
       <div class="block-head"><h2>주말</h2></div>

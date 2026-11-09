@@ -141,15 +141,19 @@ export function gradeCloze(blank, pick) {
   return blank.options[pick] && blank.options[pick].ok === true;
 }
 
-function clozeCard(passage, mine, flagged) {
+function clozeCard(passage, mine, flagged, view) {
   const blanks = passage.blanks
     .map((b) => {
       const pick = mine[b.no];
       const ok = gradeCloze(b, pick);
-      const opts = b.options
-        .map((o, i) => {
-          const cls = [o.ok ? "is-answer" : "", i === pick && !o.ok ? "is-mine" : ""].filter(Boolean).join(" ");
-          return `<li class="${cls}"><span class="k">${KEYS[i]}</span><div><span class="zh" lang="zh-CN">${esc(
+      // 풀 때 본 차례와 글자를 그대로 쓴다. 저장된 차례대로 보여 주면 정답이 늘
+      // A 자리에 오고, 내가 고른 글자와도 어긋나서 어느 것을 골랐는지 헷갈린다.
+      const shown = (view && view.cloze[b.no]) || b.options.map((_, i) => i);
+      const opts = shown
+        .map((oi, pos) => {
+          const o = b.options[oi];
+          const cls = [o.ok ? "is-answer" : "", oi === pick && !o.ok ? "is-mine" : ""].filter(Boolean).join(" ");
+          return `<li class="${cls}"><span class="k">${KEYS[pos]}</span><div><span class="zh" lang="zh-CN">${esc(
             o.t
           )}</span><span class="note">${esc(o.note)}</span></div></li>`;
         })
@@ -182,7 +186,7 @@ function writingCard(item, ans, flagged) {
   </div>`;
 }
 
-export function renderResult(set, ans, flags) {
+export function renderResult(set, ans, flags, view) {
   const flagged = new Set(flags.map((f) => f.id));
   const seqHits = gradeSequence(set.sequence, ans.sequence).filter(Boolean).length;
   const ordHits = set.order.filter((it) => gradeOrder(it, ans.order[it.id]).ok).length;
@@ -207,7 +211,7 @@ export function renderResult(set, ans, flags) {
     </section>`,
     `<section class="block">
       <div class="block-head"><h2>단문 빈칸</h2></div>
-      ${clozeCard(set.cloze, ans.cloze, flagged.has(set.cloze.id))}
+      ${clozeCard(set.cloze, ans.cloze, flagged.has(set.cloze.id), view)}
     </section>`,
   ];
   if (set.writing) {
