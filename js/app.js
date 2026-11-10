@@ -308,10 +308,6 @@ main.addEventListener("click", (e) => {
     if (!readingComplete(rd, rdAns)) return;
     gradeReading();
     return;
-  } else if (act === "rd-top") {
-    const t = document.getElementById("rdText");
-    if (t) t.scrollIntoView({ behavior: "smooth", block: "start" });
-    return;
   } else if (act === "next-reading") {
     startReading();
     return;

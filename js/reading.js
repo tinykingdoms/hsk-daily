@@ -105,8 +105,7 @@ export function renderReading(rd, ans, view) {
   </section>
   <button type="button" class="primary-btn" data-act="rd-grade"${ready ? "" : " disabled"}>${
     ready ? "채점하고 해설 보기" : "네 문항을 다 고르면 채점할 수 있습니다"
-  }</button>
-  <button type="button" class="jump-btn" data-act="rd-top">지문</button>`;
+  }</button>`;
 }
 
 export function renderReadingResult(rd, ans, flags, view) {
