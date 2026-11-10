@@ -463,3 +463,42 @@ textarea {
 code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; }
 
 label { display: block; font-size: 13px; color: var(--ink-2); margin-bottom: 4px; }
+
+/* ------------------------------------------------------------ 긴 지문 */
+.top-nav { display: flex; gap: 8px; flex: 0 0 auto; }
+
+.rd-text {
+  margin: 0;
+  padding: 14px;
+  background: var(--panel);
+  border-radius: var(--radius);
+  font-size: 16px;
+  line-height: 2;
+}
+.rd-text p { margin: 0 0 14px; }
+.rd-text p:last-child { margin-bottom: 0; }
+
+/* 번역은 본문과 같은 상자 모양으로 바로 아래에 둔다. 단락이 일대일로 맞는다 */
+.rd-ko { margin-top: 10px; font-size: 14px; line-height: 1.8; color: var(--ink-2); }
+.rd-ko p { margin-bottom: 10px; }
+
+.q-zh { margin: 6px 0 2px; font-size: 16px; line-height: 1.7; }
+.q-ko { margin: 0 0 8px; font-size: 13px; color: var(--ink-2); }
+
+/* 지문이 길어서 문항을 풀다 보면 위가 안 보인다. 한 번에 올라가는 단추 */
+.jump-btn {
+  position: fixed;
+  right: 16px;
+  bottom: 18px;
+  z-index: 5;
+  padding: 9px 15px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+}

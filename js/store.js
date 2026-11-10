@@ -1,7 +1,7 @@
 // 기록은 이 기기에만 쌓인다. PC와 폰이 따로 쌓이는 건 의도된 것이다.
 const KEY = "hsk-daily-v1";
 
-const blank = () => ({ days: {}, sets: {}, seen: {}, stats: {}, flags: [] });
+const blank = () => ({ days: {}, sets: {}, seen: {}, stats: {}, flags: [], reading: {} });
 
 export function load() {
   try {
@@ -52,6 +52,32 @@ export function recordSet(state, setId, dayKey, got, total) {
 /** 오늘 이미 끝낸 세트 수. 다음 세트가 몇 번째인지 여기서 정한다. */
 export function setsToday(state, dayKey) {
   return Object.keys(state.sets).filter((id) => id.startsWith(dayKey + "#")).length;
+}
+
+/**
+ * 긴 지문 점수는 세트 점수와 섞지 않는다.
+ *
+ * 세트 점수(days, sets)는 단락과 어순과 빈칸의 합계다. 거기에 읽기를 더하면
+ * 다른 것을 한 칸에 담게 되고, 정답률이 무엇의 정답률인지 알 수 없어진다.
+ */
+export function recordReading(state, id, dayKey, got, total) {
+  state.reading = state.reading || {};
+  state.reading[id] = { got, total, day: dayKey, at: Date.now() };
+}
+
+/** 오늘 이미 읽은 지문 수. 다음 지문이 몇 번째인지 여기서 정한다. */
+export function readingToday(state, dayKey) {
+  return Object.keys(state.reading || {}).filter((id) => id.startsWith(dayKey + "#")).length;
+}
+
+/** 읽기 전체 합계. 기록 화면에서 세트와 다른 줄로 보여 준다. */
+export function readingTotals(state) {
+  const all = Object.values(state.reading || {});
+  return {
+    count: all.length,
+    got: all.reduce((s, v) => s + v.got, 0),
+    total: all.reduce((s, v) => s + v.total, 0),
+  };
 }
 
 export function dateKey(d = new Date()) {

@@ -305,6 +305,60 @@ def check_writing(doc):
             fail(w, "promptKo 가 비었다")
 
 
+# ------------------------------------------------------------- 긴 지문 읽기
+def check_reading(doc):
+    seen = set()
+    for ps in doc["passages"]:
+        w = f"reading/{ps.get('id', '?')}"
+        if ps["id"] in seen:
+            fail(w, "id 중복")
+        seen.add(ps["id"])
+
+        text = ps.get("text", "")
+        check_chinese(f"{w}/text", "".join(text.splitlines()))
+        n = len(re.findall(CJK, text))
+        if not 280 <= n <= 420:
+            fail(w, f"본문이 {n}자. 280자에서 420자 사이여야 한다")
+
+        paras = [p for p in text.splitlines() if p.strip()]
+        koParas = [p for p in ps.get("ko", "").splitlines() if p.strip()]
+        if len(paras) < 3:
+            fail(w, f"단락이 {len(paras)}개. 세 개 이상이어야 한다")
+        if len(koParas) != len(paras):
+            fail(w, f"번역 단락이 {len(koParas)}개, 본문은 {len(paras)}개")
+
+        flat = re.sub(r"\s", "", text)
+        qs = ps.get("questions", [])
+        if len(qs) != 4:
+            fail(w, f"문항이 {len(qs)}개. 네 개여야 한다")
+        for q in qs:
+            qw = f"{w}/q{q.get('no', '?')}"
+            check_chinese(f"{qw}/q", q.get("q", ""))
+            if not q.get("qKo", "").strip():
+                fail(qw, "qKo 가 비었다")
+            # 근거 문장을 본문에서 그대로 가져오게 해서, 본문에 없는 답을 막는다
+            where = re.sub(r"\s", "", q.get("where", ""))
+            if not where:
+                fail(qw, "where 가 비었다. 근거 문장을 못 쓰겠으면 본문이 답하지 않는 문항이다")
+            elif where not in flat:
+                fail(qw, f"where 가 본문에 그대로 있지 않다: {q['where'][:30]}")
+            opts = q.get("options", [])
+            if len(opts) != 4:
+                fail(qw, f"선택지가 {len(opts)}개 (4개여야 한다)")
+            oks = [o for o in opts if o.get("ok")]
+            if len(oks) != 1:
+                fail(qw, f"정답으로 표시된 선택지가 {len(oks)}개")
+            for o in opts:
+                check_chinese(f"{qw}/{o.get('t', '?')}", o.get("t", ""))
+                if not o.get("note", "").strip():
+                    fail(qw, f"선택지 '{o.get('t')}' 의 note 가 비었다")
+        nos = [q.get("no") for q in qs]
+        if nos != [1, 2, 3, 4]:
+            fail(w, f"문항 번호가 {nos}. 1 2 3 4 여야 한다")
+        if not ps.get("topic", "").strip():
+            fail(w, "topic 이 비었다")
+
+
 def main():
     counts = {}
     for name, fn, key in [
@@ -312,6 +366,7 @@ def main():
         ("sequence.json", check_sequence, "sets"),
         ("cloze.json", check_cloze, "passages"),
         ("writing.json", check_writing, "items"),
+        ("reading.json", check_reading, "passages"),
     ]:
         doc = load(name)
         if doc is None:

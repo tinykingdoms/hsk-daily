@@ -1,12 +1,20 @@
-import { load, save, bumpStat, dateKey, markSeen, recordSet, setsToday } from "./store.js";
+import {
+  load, save, bumpStat, dateKey, markSeen, recordSet, setsToday,
+  recordReading, readingToday, readingTotals,
+} from "./store.js";
 import { buildDay, seedSeen } from "./daily.js";
 import { renderDrill, buildView, emptyAnswers, isComplete, countCjk, esc } from "./drill.js";
 import { renderResult, gradeOrder, gradeSequence, gradeCloze } from "./explain.js";
+import {
+  buildReading, buildReadingView, emptyReadingAnswers, readingComplete,
+  gradeReadingQuestion, renderReading, renderReadingResult, readingExhausted,
+} from "./reading.js";
 
 const main = document.getElementById("main");
 const dayLine = document.getElementById("dayLine");
 
 let data, state, set, view, ans;
+let rd, rdView, rdAns;
 let route = "drill";
 let forceWeekday = false;
 
@@ -14,15 +22,15 @@ const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
 
 async function boot() {
   try {
-    const [sequence, order, cloze, writing] = await Promise.all(
-      ["sequence", "order", "cloze", "writing"].map((n) =>
+    const [sequence, order, cloze, writing, reading] = await Promise.all(
+      ["sequence", "order", "cloze", "writing", "reading"].map((n) =>
         fetch(`data/${n}.json`, { cache: "no-cache" }).then((r) => {
           if (!r.ok) throw new Error(`${n}.json ${r.status}`);
           return r.json();
         })
       )
     );
-    data = { sequence, order, cloze, writing };
+    data = { sequence, order, cloze, writing, reading };
   } catch (e) {
     main.innerHTML = `<section class="block"><p class="empty">문항 파일을 읽지 못했습니다. ${esc(
       e.message
@@ -63,9 +71,42 @@ function startDay() {
   render();
 }
 
+/** 긴 지문은 하루치 세트와 따로 돈다. 세트를 풀지 않아도 열린다. */
+function startReading() {
+  const now = today();
+  rd = buildReading(data, state, now, readingToday(state, dateKey(now)));
+  if (!rd.exhausted) {
+    rdView = buildReadingView(rd);
+    rdAns = emptyReadingAnswers(rd);
+  }
+  route = "reading";
+  render();
+  window.scrollTo(0, 0);
+}
+
+function gradeReading() {
+  const first = !(rd.id in (state.reading || {}));
+  const got = rd.passage.questions.filter((q) => gradeReadingQuestion(q, rdAns[q.no])).length;
+  if (first) markSeen(state, [rd.passage.id], rd.key);
+  recordReading(state, rd.id, rd.key, got, rd.passage.questions.length);
+  save(state);
+  route = "reading-result";
+  render();
+  window.scrollTo(0, 0);
+}
+
 function header() {
   const now = today();
   const bits = [`${now.getMonth() + 1}월 ${now.getDate()}일 ${WEEK[now.getDay()]}요일`];
+  if (route === "reading" || route === "reading-result") {
+    if (!rd.exhausted) {
+      bits.push("긴 지문");
+      if (rd.nth > 1) bits.push(`${rd.nth}번째`);
+      bits.push(`${rd.total}문항`);
+    }
+    dayLine.textContent = bits.join(" · ");
+    return;
+  }
   if (!set.exhausted) {
     if (set.nth > 1) bits.push(`${set.nth}번째 세트`);
     bits.push(`${set.total}문항`);
@@ -79,6 +120,10 @@ function render() {
   header();
   if (route === "record") {
     main.innerHTML = recordView();
+  } else if (route === "reading") {
+    main.innerHTML = rd.exhausted ? readingExhausted() : renderReading(rd, rdAns, rdView);
+  } else if (route === "reading-result") {
+    main.innerHTML = renderReadingResult(rd, rdAns, state.flags, rdView);
   } else if (set.exhausted) {
     main.innerHTML = exhaustedView();
   } else if (route === "result") {
@@ -193,6 +238,8 @@ function recordView() {
 
   const setCount = Object.keys(state.sets).length;
   const left = leftCount();
+  const rt = readingTotals(state);
+  const leftReading = data.reading.passages.filter((p) => !state.seen[p.id]).length;
 
   return `<section class="block">
     <div class="block-head"><h2>푼 날</h2><span class="counter">${days.length}일 · 세트 ${setCount}개</span></div>
@@ -202,6 +249,15 @@ function recordView() {
         : `<p class="empty">아직 기록이 없습니다.</p>`
     }
     <p class="hint">남은 문항은 단락 ${left.sequence}세트, 어순 ${left.order}문항, 빈칸 ${left.cloze}지문입니다.</p>
+  </section>
+  <section class="block">
+    <div class="block-head"><h2>긴 지문</h2><span class="counter">${rt.count}편</span></div>
+    ${
+      rt.count
+        ? `<p class="hint">${rt.got} / ${rt.total}문항, 정답률 ${Math.round((rt.got / rt.total) * 100)}%. 남은 지문은 ${leftReading}편입니다.</p>`
+        : `<p class="empty">아직 읽은 지문이 없습니다. 남은 지문은 ${leftReading}편입니다.</p>`
+    }
+    <div class="row-btns"><button type="button" data-act="open-reading">한 편 읽기</button></div>
   </section>
   <section class="block">
     <div class="block-head"><h2>어법별 정답률</h2><span class="counter">어순 문항만</span></div>
@@ -246,6 +302,19 @@ main.addEventListener("click", (e) => {
     if (!list.includes(ci)) list.push(ci);
   } else if (act === "ord-pull") {
     ans.order[btn.dataset.id].splice(Number(btn.dataset.pos), 1);
+  } else if (act === "rd-pick") {
+    rdAns[btn.dataset.no] = Number(btn.dataset.oi);
+  } else if (act === "rd-grade") {
+    if (!readingComplete(rd, rdAns)) return;
+    gradeReading();
+    return;
+  } else if (act === "rd-top") {
+    const t = document.getElementById("rdText");
+    if (t) t.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  } else if (act === "next-reading") {
+    startReading();
+    return;
   } else if (act === "clz") {
     ans.cloze[btn.dataset.no] = Number(btn.dataset.oi);
   } else if (act === "grade") {
@@ -266,6 +335,7 @@ main.addEventListener("click", (e) => {
     return;
   } else if (act === "back") {
     route = set.id in state.sets ? "result" : "drill";
+    window.scrollTo(0, 0);
   } else if (act === "anyway") {
     forceWeekday = true;
   } else if (act === "flag") {
@@ -274,6 +344,9 @@ main.addEventListener("click", (e) => {
     if (i === -1) state.flags.push({ id, at: Date.now() });
     else state.flags.splice(i, 1);
     save(state);
+  } else if (act === "open-reading") {
+    startReading();
+    return;
   } else if (act === "copy-flags") {
     copy(JSON.stringify(state.flags.map((f) => f.id), null, 2), btn);
     return;
@@ -305,6 +378,16 @@ function copy(text, btn) {
   if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, () => prompt("복사하세요", text));
   else prompt("복사하세요", text);
 }
+
+document.getElementById("navReading").addEventListener("click", () => {
+  if (route === "reading" || route === "reading-result") {
+    route = set.id in state.sets ? "result" : "drill";
+    render();
+    window.scrollTo(0, 0);
+    return;
+  }
+  startReading();
+});
 
 document.getElementById("navRecord").addEventListener("click", () => {
   route = route === "record" ? (set.id in state.sets ? "result" : "drill") : "record";
