@@ -42,7 +42,7 @@ async function boot() {
   }
 }
 
-/** ?d=2026-11-13 을 붙이면 그 날짜의 세트를 볼 수 있다. 금요일 쓰기 확인용. */
+/** ?d=2026-11-13 을 붙이면 그 날짜의 세트를 볼 수 있다. 월요일과 금요일 쓰기 확인용. */
 function today() {
   const q = new URLSearchParams(location.search).get("d");
   if (q && /^\d{4}-\d{2}-\d{2}$/.test(q)) {
