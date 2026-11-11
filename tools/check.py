@@ -352,6 +352,13 @@ def check_reading(doc):
                 check_chinese(f"{qw}/{o.get('t', '?')}", o.get("t", ""))
                 if not o.get("note", "").strip():
                     fail(qw, f"선택지 '{o.get('t')}' 의 note 가 비었다")
+            # 정답은 본문에서 가져오니 길어지고, 오답은 지어내니 짧아진다. 그대로 두면
+            # 본문을 읽지 않고 제일 긴 것만 골라도 맞는다. 그러면 읽기 연습이 아니다.
+            if len(oks) == 1:
+                ok_t = oks[0].get("t", "")
+                others = [o.get("t", "") for o in opts if not o.get("ok")]
+                if others and len(ok_t) > max(len(t) for t in others):
+                    fail(qw, f"정답이 혼자 가장 긴 보기다. 읽지 않고 길이로 고를 수 있다: {ok_t}")
         nos = [q.get("no") for q in qs]
         if nos != [1, 2, 3, 4]:
             fail(w, f"문항 번호가 {nos}. 1 2 3 4 여야 한다")
