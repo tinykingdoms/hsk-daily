@@ -352,6 +352,11 @@ def check_reading(doc):
                 check_chinese(f"{qw}/{o.get('t', '?')}", o.get("t", ""))
                 if not o.get("note", "").strip():
                     fail(qw, f"선택지 '{o.get('t')}' 의 note 가 비었다")
+            # 해설은 보기가 무슨 뜻인지 적는 자리다. '본문에 나온다', '본문에 없다' 는
+            # 읽으나 마나 한 말이라 자리만 차지한다.
+            for o in opts:
+                if "본문" in o.get("note", ""):
+                    fail(qw, f"선택지 '{o.get('t')}' 의 note 가 해석이 아니라 본문 이야기다")
             # 정답은 본문에서 가져오니 길어지고, 오답은 지어내니 짧아진다. 그대로 두면
             # 본문을 읽지 않고 제일 긴 것만 골라도 맞는다. 그러면 읽기 연습이 아니다.
             if len(oks) == 1:
@@ -364,6 +369,24 @@ def check_reading(doc):
             fail(w, f"문항 번호가 {nos}. 1 2 3 4 여야 한다")
         if not ps.get("topic", "").strip():
             fail(w, "topic 이 비었다")
+
+        # 가져갈 말은 이 지문에서 나온 것이어야 한다. 본문에 없는 단어를 외우게 하면
+        # 지문을 읽은 것과 상관없는 목록이 된다
+        vocab = ps.get("vocab", [])
+        if not 6 <= len(vocab) <= 10:
+            fail(w, f"주요 어휘가 {len(vocab)}개. 6개에서 10개 사이여야 한다")
+        seen_w = set()
+        for v in vocab:
+            word = v.get("w", "")
+            if not word:
+                fail(w, "주요 어휘에 단어가 비었다")
+            elif word not in flat:
+                fail(w, f"주요 어휘 '{word}' 가 본문에 없다")
+            if word in seen_w:
+                fail(w, f"주요 어휘 '{word}' 가 두 번 나온다")
+            seen_w.add(word)
+            if not v.get("ko", "").strip():
+                fail(w, f"주요 어휘 '{word}' 의 뜻이 비었다")
 
 
 def main():

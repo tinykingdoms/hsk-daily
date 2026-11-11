@@ -484,3 +484,18 @@ label { display: block; font-size: 13px; color: var(--ink-2); margin-bottom: 4px
 
 .q-zh { margin: 6px 0 2px; font-size: 16px; line-height: 1.7; }
 .q-ko { margin: 0 0 8px; font-size: 13px; color: var(--ink-2); }
+/* 문항 화면에는 번역이 없다. 중국어 바로 밑에 보기가 붙지 않게 띄운다 */
+.q-zh + .opts { margin-top: 12px; }
+
+/* 지문에서 가져갈 말. 단어 칸은 좁게 묶고 남는 폭은 뜻에 준다 */
+.vocab { margin: 10px 0 0; padding: 0; list-style: none; }
+.vocab li {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+.vocab li:last-child { border-bottom: 0; padding-bottom: 0; }
+.vocab .zh { font-size: 16px; font-weight: 650; }
+.vocab .v-ko { font-size: 14px; color: var(--ink-2); }

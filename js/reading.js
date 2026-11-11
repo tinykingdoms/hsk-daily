@@ -84,10 +84,10 @@ export function renderReading(rd, ans, view) {
             </button>`
         )
         .join("");
+      // 문항 화면에는 한국어를 넣지 않는다. 실제 시험지에 없는 것은 여기에도 없어야 한다.
       return `<div class="q">
         <p class="q-no">${q.no}번</p>
         <p class="q-zh zh" lang="zh-CN">${esc(q.q)}</p>
-        <p class="q-ko">${esc(q.qKo)}</p>
         <div class="opts">${opts}</div>
       </div>`;
     })
@@ -96,7 +96,6 @@ export function renderReading(rd, ans, view) {
   const ready = readingComplete(rd, ans);
   return `<section class="block">
     <div class="block-head"><h2>긴 지문</h2><span class="counter">${p.questions.length}문항</span></div>
-    <p class="hint">먼저 끝까지 읽고 문항을 보세요. 모르는 글자가 있어도 멈추지 말고 끝까지 갑니다.</p>
     <div id="rdText" class="rd-text zh" lang="zh-CN">${paragraphs(p.text)}</div>
   </section>
   <section class="block">
@@ -106,6 +105,22 @@ export function renderReading(rd, ans, view) {
   <button type="button" class="primary-btn" data-act="rd-grade"${ready ? "" : " disabled"}>${
     ready ? "채점하고 해설 보기" : "네 문항을 다 고르면 채점할 수 있습니다"
   }</button>`;
+}
+
+/** 이 지문에서 가져갈 말. 전부 본문 안에 있는 단어다. */
+function vocabBlock(p) {
+  const list = p.vocab || [];
+  if (!list.length) return "";
+  const rows = list
+    .map(
+      (v) =>
+        `<li><span class="zh" lang="zh-CN">${esc(v.w)}</span><span class="v-ko">${esc(v.ko)}</span></li>`
+    )
+    .join("");
+  return `<section class="block">
+    <div class="block-head"><h2>주요 어휘</h2><span class="counter">${list.length}개</span></div>
+    <ul class="vocab">${rows}</ul>
+  </section>`;
 }
 
 export function renderReadingResult(rd, ans, flags, view) {
@@ -142,12 +157,12 @@ export function renderReadingResult(rd, ans, flags, view) {
 
   return `<section class="block">
     <div class="score"><strong>${got} / ${p.questions.length}</strong><span>${esc(p.topic)}</span></div>
-    <p class="hint">같은 지문은 다시 나오지 않습니다. 틀린 자리는 근거 문장을 본문에서 찾아 두세요.</p>
   </section>
   <section class="block">
     <div class="block-head"><h2>해설</h2></div>
     ${cards}
   </section>
+  ${vocabBlock(p)}
   <section class="block">
     <div class="block-head"><h2>본문</h2></div>
     <div class="rd-text zh" lang="zh-CN">${paragraphs(p.text)}</div>
