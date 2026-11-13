@@ -46,9 +46,56 @@ async function boot() {
     save(state);
   }
   startDay();
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
-  }
+  keepFresh();
+}
+
+/**
+ * 고친 것이 폰에 내려가게 한다.
+ *
+ * 홈 화면에 깔아 두면 앱을 다시 열어도 페이지가 그대로 살아 있다. 새로 고치는 일이
+ * 없으니 며칠 전 파일을 계속 본다. 고쳐서 올려도 모르고, 이미 지운 줄을 계속 본다.
+ * 그래서 열 때와 다시 앞으로 올 때마다 새 것이 있는지 묻는다.
+ *
+ * 받아 놓고 바로 다시 그리지는 않는다. 풀던 답과 쓰던 작문이 날아가기 때문이다.
+ * 풀던 것이 없을 때, 아니면 다음 세트를 열 때 바꿔 끼운다.
+ */
+let fresh = false;
+
+function busy() {
+  if (rd && rdAns && Object.values(rdAns).some((x) => x !== null)) return true;
+  if (!ans) return false;
+  return (
+    ans.writing.text.trim() !== "" ||
+    ans.sequence.some((x) => x !== null) ||
+    Object.values(ans.order).some((l) => l.length) ||
+    Object.values(ans.cloze).some((x) => x !== null)
+  );
+}
+
+function swapIn() {
+  if (!fresh) return;
+  fresh = false;
+  location.reload();
+}
+
+function keepFresh() {
+  if (!("serviceWorker" in navigator)) return;
+  const had = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    // 처음 깔리는 중이면 지금 보고 있는 것이 이미 새 파일이다
+    if (!had) return;
+    fresh = true;
+    if (!busy()) swapIn();
+  });
+  navigator.serviceWorker.register("sw.js").then((reg) => {
+    const ask = () => reg.update().catch(() => {});
+    ask();
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) return;
+      if (fresh && !busy()) swapIn();
+      else ask();
+    });
+  }, () => {});
 }
 
 /** ?d=2026-11-13 을 붙이면 그 날짜의 세트를 볼 수 있다. 월요일과 금요일 쓰기 확인용. */
@@ -62,6 +109,7 @@ function today() {
 }
 
 function startDay() {
+  swapIn();
   const now = today();
   set = buildDay(data, state, now, setsToday(state, dateKey(now)));
   if (!set.exhausted) {
@@ -74,6 +122,7 @@ function startDay() {
 
 /** 긴 지문은 하루치 세트와 따로 돈다. 세트를 풀지 않아도 열린다. */
 function startReading() {
+  swapIn();
   const now = today();
   rd = buildReading(data, state, now, readingToday(state, dateKey(now)));
   if (!rd.exhausted) {
