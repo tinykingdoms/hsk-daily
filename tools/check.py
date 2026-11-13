@@ -389,8 +389,163 @@ def check_reading(doc):
                 fail(w, f"주요 어휘 '{word}' 의 뜻이 비었다")
 
 
+# ------------------------------------------------------- 쓰기 점검 규칙
+def py_fix(fix):
+    """$1 자리표를 파이썬 교체 문법으로 바꾼다. 규칙은 브라우저와 여기가 같이 쓴다."""
+    return re.sub(r"\$(\d)", r"\\\1", fix) if fix else fix
+
+
+def evened(text, west):
+    """반각 부호를 전각으로 바꾼 사본. 브라우저쪽과 같은 글에 규칙을 돌리려는 것이다."""
+    return "".join(west.get(c, c) for c in text)
+
+
+def rule_hits(text, r):
+    out = []
+    for m in re.finditer(r["re"], text):
+        if not m.group(0):
+            continue
+        if r.get("unless"):
+            win = text[max(0, m.start() - 6) : m.end()]
+            if re.search(r["unless"], win):
+                continue
+        out.append(m)
+    return out
+
+
+def chinese_bodies(docs):
+    """글 한 편으로 볼 수 있는 것. 짝 규칙은 여기에만 돌린다."""
+    out = []
+    if docs.get("writing.json"):
+        for it in docs["writing.json"]["items"]:
+            out.append((f"writing/{it['id']}/prompt", it["prompt"]))
+            out.append((f"writing/{it['id']}/model", it["model"]))
+    if docs.get("reading.json"):
+        for ps in docs["reading.json"]["passages"]:
+            out.append((f"reading/{ps['id']}/text", ps["text"]))
+    if docs.get("cloze.json"):
+        for ps in docs["cloze.json"]["passages"]:
+            text = ps["text"]
+            for b in ps["blanks"]:
+                ok = next((o["t"] for o in b["options"] if o.get("ok")), "")
+                text = text.replace("{{%d}}" % b["no"], ok)
+            out.append((f"cloze/{ps['id']}/text", text))
+    if docs.get("sequence.json"):
+        for st in docs["sequence.json"]["sets"]:
+            joined = "".join(st["segments"].get(k, "") for k in st["answer"])
+            out.append((f"sequence/{st['id']}", joined))
+    return out
+
+
+def chinese_fragments(docs):
+    """조각글. 글자 몇 개 범위에서 판정되는 규칙만 돌린다."""
+    out = []
+    if docs.get("writing.json"):
+        for it in docs["writing.json"]["items"]:
+            for i, pn in enumerate(it.get("panels", [])):
+                out.append((f"writing/{it['id']}/panel{i}", pn["scene"]))
+    if docs.get("reading.json"):
+        for ps in docs["reading.json"]["passages"]:
+            for q in ps["questions"]:
+                out.append((f"reading/{ps['id']}/q{q['no']}", q["q"]))
+                for o in q["options"]:
+                    out.append((f"reading/{ps['id']}/q{q['no']}", o["t"]))
+    if docs.get("cloze.json"):
+        for ps in docs["cloze.json"]["passages"]:
+            for b in ps["blanks"]:
+                for o in b["options"]:
+                    out.append((f"cloze/{ps['id']}/blank{b['no']}", o["t"]))
+    if docs.get("order.json"):
+        for it in docs["order.json"]["items"]:
+            out.append((f"order/{it['id']}", it["sentence"]))
+    return out
+
+
+def check_wrules(doc, docs):
+    """쓴 글을 보는 규칙을 검사한다.
+
+    규칙이 애매하면 틀린 표현을 고쳐 준다고 하면서 맞는 표현을 틀렸다고 한다. 그래서
+    두 가지를 본다. 규칙마다 적어 둔 bad 를 실제로 잡는가, 그리고 레포 안에 있는
+    올바른 중국어 전부에 대해 한 건도 걸리지 않는가. 하나라도 걸리면 그 규칙이 틀렸다.
+    """
+    west = doc.get("halfwidth") or {}
+    if not west:
+        fail("wrules", "halfwidth (반각 부호 표) 가 비었다")
+    ids = set()
+    for r in doc.get("rules", []):
+        w = f"wrules/{r.get('id', '?')}"
+        if r["id"] in ids:
+            fail(w, "id 중복")
+        ids.add(r["id"])
+        for key in ("re", "why", "level", "bad"):
+            if not r.get(key):
+                fail(w, f"{key} 가 비었다")
+        if r.get("level") not in ("fix", "look"):
+            fail(w, f"모르는 level '{r.get('level')}'")
+        try:
+            re.compile(r["re"])
+        except re.error as e:
+            fail(w, f"정규식이 깨졌다: {e}")
+            continue
+        if not rule_hits(r.get("bad", ""), r):
+            fail(w, f"bad '{r.get('bad')}' 를 잡지 못한다. 규칙이 작동하지 않는다")
+        if r.get("fix"):
+            if not r.get("good"):
+                fail(w, "fix 가 있으면 good (고친 모양) 도 있어야 한다")
+            else:
+                got = re.sub(r["re"], py_fix(r["fix"]), r["bad"])
+                if got != r["good"]:
+                    fail(w, f"고친 결과가 '{got}', good 은 '{r['good']}'")
+
+    for group, kind in (("pairs", "head"), ("counted", "word")):
+        for g in doc.get(group, []):
+            w = f"wrules/{g.get('id', '?')}"
+            if not g.get("bad"):
+                fail(w, "bad 가 비었다")
+            if not g.get("why"):
+                fail(w, "why 가 비었다")
+            if group == "pairs" and not g.get("needs"):
+                fail(w, "needs 가 비었다")
+
+    bodies = chinese_bodies(docs)
+    frags = chinese_fragments(docs)
+    clean = 0
+    for where, text in bodies + frags:
+        flat = evened(text.replace("\n", ""), west)
+        clean += 1
+        for r in doc.get("rules", []):
+            for m in rule_hits(flat, r):
+                around = flat[max(0, m.start() - 10) : m.end() + 10]
+                fail(
+                    f"wrules/{r['id']}",
+                    f"옳은 글 {where} 의 '{around}' 를 잡는다. 규칙이 넓다",
+                )
+    for where, text in bodies:
+        flat = text.replace("\n", "")
+        for g in doc.get("pairs", []):
+            if g["head"] in flat and not any(n in flat for n in g["needs"]):
+                fail(f"wrules/{g['id']}", f"옳은 글 {where} 를 잡는다. 규칙이 넓다")
+        for g in doc.get("counted", []):
+            t = flat
+            for st in g.get("strip", []):
+                t = t.replace(st, "")
+            if t.count(g["word"]) == 1:
+                fail(f"wrules/{g['id']}", f"옳은 글 {where} 를 잡는다. 규칙이 넓다")
+    for g in doc.get("pairs", []):
+        if g["head"] in g.get("bad", "") and any(n in g.get("bad", "") for n in g.get("needs", [])):
+            fail(f"wrules/{g['id']}", f"bad '{g['bad']}' 를 잡지 못한다")
+    for g in doc.get("counted", []):
+        t = g.get("bad", "")
+        for st in g.get("strip", []):
+            t = t.replace(st, "")
+        if t.count(g["word"]) != 1:
+            fail(f"wrules/{g['id']}", f"bad '{g['bad']}' 를 잡지 못한다")
+    return clean
+
+
 def main():
     counts = {}
+    docs = {}
     for name, fn, key in [
         ("order.json", check_order, "items"),
         ("sequence.json", check_sequence, "sets"),
@@ -401,8 +556,17 @@ def main():
         doc = load(name)
         if doc is None:
             continue
+        docs[name] = doc
         fn(doc)
         counts[name] = len(doc[key])
+
+    wdoc = load("wrules.json")
+    if wdoc is not None:
+        n = check_wrules(wdoc, docs)
+        counts["wrules.json"] = len(wdoc.get("rules", [])) + len(wdoc.get("pairs", [])) + len(
+            wdoc.get("counted", [])
+        )
+        print(f"쓰기 점검 규칙을 올바른 글 {n}편에 돌렸다")
 
     print("문항 수")
     for k, v in counts.items():

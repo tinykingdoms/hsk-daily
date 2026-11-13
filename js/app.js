@@ -18,19 +18,20 @@ let rd, rdView, rdAns;
 let route = "drill";
 let forceWeekday = false;
 
-const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
+// 제목줄도 문제를 푸는 동안 눈에 들어온다. 그래서 여기도 중국어로 둔다.
+const WEEK = ["日", "一", "二", "三", "四", "五", "六"];
 
 async function boot() {
   try {
-    const [sequence, order, cloze, writing, reading] = await Promise.all(
-      ["sequence", "order", "cloze", "writing", "reading"].map((n) =>
+    const [sequence, order, cloze, writing, reading, wrules] = await Promise.all(
+      ["sequence", "order", "cloze", "writing", "reading", "wrules"].map((n) =>
         fetch(`data/${n}.json`, { cache: "no-cache" }).then((r) => {
           if (!r.ok) throw new Error(`${n}.json ${r.status}`);
           return r.json();
         })
       )
     );
-    data = { sequence, order, cloze, writing, reading };
+    data = { sequence, order, cloze, writing, reading, wrules };
   } catch (e) {
     main.innerHTML = `<section class="block"><p class="empty">문항 파일을 읽지 못했습니다. ${esc(
       e.message
@@ -97,20 +98,20 @@ function gradeReading() {
 
 function header() {
   const now = today();
-  const bits = [`${now.getMonth() + 1}월 ${now.getDate()}일 ${WEEK[now.getDay()]}요일`];
+  const bits = [`${now.getMonth() + 1}月${now.getDate()}日 星期${WEEK[now.getDay()]}`];
   if (route === "reading" || route === "reading-result") {
     if (!rd.exhausted) {
-      bits.push("긴 지문");
-      if (rd.nth > 1) bits.push(`${rd.nth}번째`);
-      bits.push(`${rd.total}문항`);
+      bits.push("阅读");
+      if (rd.nth > 1) bits.push(`第${rd.nth}篇`);
+      bits.push(`${rd.total}题`);
     }
     dayLine.textContent = bits.join(" · ");
     return;
   }
   if (!set.exhausted) {
-    if (set.nth > 1) bits.push(`${set.nth}번째 세트`);
-    bits.push(`${set.total}문항`);
-    if (set.writing) bits.push("쓰기 포함");
+    if (set.nth > 1) bits.push(`第${set.nth}套`);
+    bits.push(`${set.total}题`);
+    if (set.writing) bits.push("含写作");
   }
   dayLine.textContent = bits.join(" · ");
 }
@@ -127,7 +128,7 @@ function render() {
   } else if (set.exhausted) {
     main.innerHTML = exhaustedView();
   } else if (route === "result") {
-    main.innerHTML = renderResult(set, ans, state.flags, view);
+    main.innerHTML = renderResult(set, ans, state.flags, view, data.wrules);
   } else if (set.weekend && !forceWeekday) {
     main.innerHTML = `<section class="block">
       <div class="block-head"><h2>주말</h2></div>
@@ -145,7 +146,7 @@ function render() {
         ans.writing.text = ta.value;
         const n = countCjk(ta.value);
         const c = document.getElementById("wcount");
-        c.textContent = `${n}자 / ${set.writing.minChars}자`;
+        c.textContent = `${n} / ${set.writing.minChars}字`;
         c.classList.toggle("enough", n >= set.writing.minChars);
       });
     }

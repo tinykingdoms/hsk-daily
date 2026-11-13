@@ -1,4 +1,5 @@
-import { esc, countCjk } from "./drill.js";
+import { esc } from "./drill.js";
+import { checkWriting, applyFixes } from "./writing.js";
 
 const KEYS = ["A", "B", "C", "D", "E"];
 
@@ -169,24 +170,152 @@ function clozeCard(passage, mine, flagged, view) {
   return `${blanks}<div class="ex"><p class="ko-line">${esc(passage.ko)}</p>${flagBtn(passage.id, flagged)}</div>`;
 }
 
-function writingCard(item, ans, flagged) {
-  const n = countCjk(ans.text);
-  const mine = ans.text.trim()
-    ? `<p class="lead" style="margin:0 0 6px">내가 쓴 글 ${n}자${
-        n >= item.minChars ? "" : `, ${item.minChars - n}자 더 필요`
-      }</p><p class="answer-zh zh" lang="zh-CN" style="font-size:16px">${esc(ans.text)}</p>`
-    : `<p class="empty">아직 안 썼습니다. 모범답안을 먼저 읽는 것보다 한 줄이라도 쓰고 보는 쪽이 남습니다.</p>`;
+const TAG = { fix: "고칠 곳", look: "볼 곳", note: "참고" };
+
+/** 지적한 자리를 글 안에 칠한다. 겹치면 앞의 것만 남긴다. */
+function marked(text, findings) {
+  const spots = findings
+    .filter((f) => f.at >= 0 && f.len > 0)
+    .sort((a, b) => a.at - b.at)
+    .reduce((acc, f) => {
+      const last = acc[acc.length - 1];
+      if (last && f.at < last.at + last.len) return acc;
+      acc.push(f);
+      return acc;
+    }, []);
+  let out = "";
+  let i = 0;
+  for (const f of spots) {
+    out += esc(text.slice(i, f.at));
+    out += `<mark class="m-${f.level}">${esc(text.slice(f.at, f.at + f.len))}</mark>`;
+    i = f.at + f.len;
+  }
+  return (out + esc(text.slice(i))).replace(/\n/g, "<br>");
+}
+
+/**
+ * 같은 말을 여러 줄 쓰지 않는다.
+ *
+ * 쉼표를 네 번 반각으로 찍으면 같은 문장이 네 줄 나온다. 읽을 것이 네 배가 되는데
+ * 알게 되는 것은 똑같다. 같은 이유는 한 줄로 묶고 몇 곳인지만 적는다.
+ */
+function findList(findings) {
+  const order = { fix: 0, look: 1, note: 2 };
+  const groups = [];
+  const byKey = new Map();
+  for (const f of findings) {
+    const key = f.level + "|" + f.why;
+    if (byKey.has(key)) {
+      byKey.get(key).n += 1;
+      continue;
+    }
+    const g = { ...f, n: 1 };
+    byKey.set(key, g);
+    groups.push(g);
+  }
+  // 꼬리표를 줄마다 되풀이하지 않는다. 같은 등급끼리 묶고 머리에 한 번만 적는다
+  return Object.keys(order)
+    .map((lv) => {
+      const rows = groups.filter((g) => g.level === lv).sort((a, b) => a.at - b.at);
+      if (!rows.length) return "";
+      const items = rows
+        .map((f) => {
+          const swap = !f.bad
+            ? ""
+            : f.fix === null || f.fix === undefined
+              ? `<p class="f-swap"><span class="zh bad" lang="zh-CN">${esc(f.bad)}</span></p>`
+              : `<p class="f-swap"><span class="zh bad" lang="zh-CN">${esc(f.bad)}</span><span class="arrow">→</span>${
+                  f.fix ? `<span class="zh good" lang="zh-CN">${esc(f.fix)}</span>` : `<span class="good">빼기</span>`
+                }</p>`;
+          return `<li>
+            <p class="f-why">${esc(f.why)}${f.n > 1 ? `<span class="f-n">${f.n}곳</span>` : ""}</p>
+            ${swap}
+          </li>`;
+        })
+        .join("");
+      // 고칠 곳은 카드 머리에 이미 적혀 있다. 바로 밑에 또 적지 않는다
+      const head = lv === "fix" ? "" : `<p class="find-head">${TAG[lv]}</p>`;
+      return `<div class="find-group f-${lv}">${head}<ul class="finds">${items}</ul></div>`;
+    })
+    .join("");
+}
+
+/**
+ * 쓰기 채점. 기계가 확실히 판정할 수 있는 것만 짚고, 그 한계를 화면에 적어 둔다.
+ *
+ * 문항 화면에서 뺀 것들(문제 번역, 쓸 만한 말, 네 컷 설명)이 여기로 왔다.
+ */
+function writingCard(item, ans, flagged, wrules) {
+  const text = ans.text || "";
+  const r = checkWriting(text, item, wrules);
+  const nFix = r.findings.filter((f) => f.level === "fix").length;
+  const nLook = r.findings.filter((f) => f.level === "look").length;
+
+  if (!text.trim()) {
+    return `<div class="ex">
+      <div class="ex-head"><span class="verdict">모범답안</span><span class="counter">${esc(item.topic)}</span></div>
+      <p class="empty">아직 안 썼습니다. 모범답안을 먼저 읽는 것보다 한 줄이라도 쓰고 보는 쪽이 남습니다.</p>
+      ${modelBlock(item)}
+      ${flagBtn(item.id, flagged)}
+    </div>`;
+  }
+
+  const fixed = applyFixes(text, wrules);
+  const corrected =
+    fixed !== text
+      ? `<p class="lead" style="margin:16px 0 6px">고친 글</p>
+         <p class="answer-zh zh" lang="zh-CN" style="font-size:16px">${esc(fixed).replace(/\n/g, "<br>")}</p>`
+      : "";
+
   return `<div class="ex">
-    <div class="ex-head"><span class="verdict">모범답안</span><span class="counter">${esc(item.topic)}</span></div>
-    ${mine}
-    <p class="answer-zh zh" lang="zh-CN" style="margin-top:16px">${esc(item.model).replace(/\n/g, "<br>")}</p>
-    <p class="ko-line" style="margin-top:8px">${esc(item.modelKo).replace(/\n/g, "<br>")}</p>
-    <ul class="rules" style="margin-top:16px">${item.checklist.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>
+    <div class="ex-head">
+      <span class="verdict ${nFix ? "wrong" : "right"}">${nFix ? `고칠 곳 ${nFix}` : "고칠 곳 없음"}</span>
+      <span class="counter">${esc(item.topic)}</span>
+    </div>
+    <ul class="chips">
+      <li class="${r.n >= item.minChars ? "ok" : "no"}">${r.n} / ${item.minChars}자</li>
+      <li>단락 ${r.paras.length}개</li>
+      <li>문장 ${r.sents.length}개</li>
+    </ul>
+    ${r.findings.length ? `<ul class="finds">${findList(r.findings)}</ul>` : ""}
+    <div class="note-box"><p>여기서 보는 것은 규칙으로 판정되는 것뿐입니다. 글이 주제에 맞는지, 문장이 중국어답게 읽히는지는 아래 모범답안과 견주세요.</p></div>
+    <p class="lead" style="margin:16px 0 6px">내가 쓴 글</p>
+    <p class="answer-zh zh" lang="zh-CN" style="font-size:16px">${marked(text, r.findings)}</p>
+    ${corrected}
+    ${modelBlock(item)}
     ${flagBtn(item.id, flagged)}
   </div>`;
 }
 
-export function renderResult(set, ans, flags, view) {
+function modelBlock(item) {
+  const panels = item.panels
+    ? `<ul class="panels">${item.panels
+        .map(
+          (p, i) =>
+            `<li><b>${i + 1}</b><div><span class="zh" lang="zh-CN">${esc(p.scene)}</span><span class="ko">${esc(
+              p.sceneKo
+            )}</span></div></li>`
+        )
+        .join("")}</ul>`
+    : "";
+  const useful = `<ul class="useful">${item.useful
+    .map(
+      (u) =>
+        `<li><span class="zh" lang="zh-CN">${esc(u.w)}</span> <span class="p">${esc(u.p)}</span> ${esc(u.ko)}</li>`
+    )
+    .join("")}</ul>`;
+  return `<p class="lead" style="margin:18px 0 6px">문제</p>
+    <p class="ko-line">${esc(item.promptKo)}</p>
+    ${panels}
+    <p class="lead" style="margin:18px 0 6px">쓸 만한 말</p>
+    ${useful}
+    <p class="lead" style="margin:18px 0 6px">모범답안</p>
+    <p class="answer-zh zh" lang="zh-CN">${esc(item.model).replace(/\n/g, "<br>")}</p>
+    <p class="ko-line" style="margin-top:8px">${esc(item.modelKo).replace(/\n/g, "<br>")}</p>
+    <ul class="rules" style="margin-top:16px">${item.checklist.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>`;
+}
+
+export function renderResult(set, ans, flags, view, wrules) {
   const flagged = new Set(flags.map((f) => f.id));
   const seqHits = gradeSequence(set.sequence, ans.sequence).filter(Boolean).length;
   const ordHits = set.order.filter((it) => gradeOrder(it, ans.order[it.id]).ok).length;
@@ -199,7 +328,6 @@ export function renderResult(set, ans, flags, view) {
       <div class="score"><strong>${got} / ${total}</strong><span>단락 ${seqHits}/5 · 어순 ${ordHits}/${
       set.order.length
     } · 빈칸 ${clzHits}/${set.cloze.blanks.length}</span></div>
-      <p class="hint">같은 문항은 다시 나오지 않습니다. 자주 틀리는 어법은 다른 문장으로 먼저 나옵니다.</p>
     </section>`,
     `<section class="block">
       <div class="block-head"><h2>단락 배열</h2></div>
@@ -217,7 +345,7 @@ export function renderResult(set, ans, flags, view) {
   if (set.writing) {
     out.push(`<section class="block">
       <div class="block-head"><h2>쓰기</h2></div>
-      ${writingCard(set.writing, ans.writing, flagged.has(set.writing.id))}
+      ${writingCard(set.writing, ans.writing, flagged.has(set.writing.id), wrules)}
     </section>`);
   }
   out.push(`<div class="row-btns">

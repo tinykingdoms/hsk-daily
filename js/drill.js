@@ -59,8 +59,7 @@ function seqSection(set, ans) {
     )
     .join("");
   return `<section class="block">
-    <div class="block-head"><h2>단락 배열</h2><span class="counter">5문항</span></div>
-    <p class="hint">토막글 다섯 개를 하나의 글이 되는 순서로 놓으세요. 위 칸을 누르면 지웁니다.</p>
+    <div class="block-head"><h2 class="zh" lang="zh-CN">排列顺序</h2><span class="counter">5题</span></div>
     <div class="seq-slots">${slots}</div>
     <div>${segs}</div>
   </section>`;
@@ -94,8 +93,7 @@ function orderSection(set, ans, view) {
     })
     .join("");
   return `<section class="block">
-    <div class="block-head"><h2>어순 배열</h2><span class="counter">${set.order.length}문항</span></div>
-    <p class="hint">조각을 순서대로 누르세요. 답 칸의 조각을 누르면 되돌립니다.</p>
+    <div class="block-head"><h2 class="zh" lang="zh-CN">连词成句</h2><span class="counter">${set.order.length}题</span></div>
     ${qs}
   </section>`;
 }
@@ -124,46 +122,38 @@ function clozeSection(set, ans, view) {
             </button>`
         )
         .join("");
-      return `<div class="q"><p class="q-no">빈칸 ${b.no}</p><div class="opts">${opts}</div></div>`;
+      return `<div class="q"><p class="q-no zh" lang="zh-CN">第${b.no}题</p><div class="opts">${opts}</div></div>`;
     })
     .join("");
   return `<section class="block">
-    <div class="block-head"><h2>단문 빈칸</h2><span class="counter">${p.blanks.length}문항</span></div>
-    <p class="hint">빈칸에 들어갈 말을 고르세요. 단어가 들어가는 자리도 있고 절이 들어가는 자리도 있습니다.</p>
+    <div class="block-head"><h2 class="zh" lang="zh-CN">选词填空</h2><span class="counter">${p.blanks.length}题</span></div>
     <p class="passage zh" lang="zh-CN">${text}</p>
     ${qs}
   </section>`;
 }
 
+/**
+ * 쓰기 문항. 실제 시험지에 없는 것은 여기에도 없다.
+ *
+ * 번역, 쓸 만한 어휘, 요령은 전부 채점 화면으로 옮겼다. 풀 때 옆에 두면 그걸 보고
+ * 쓰게 되고, 시험장에서는 없는 것들이다.
+ */
 function writingSection(set, ans) {
   const w = set.writing;
   if (!w) return "";
   const panels = w.panels
     ? `<ul class="panels">${w.panels
-        .map(
-          (p, i) =>
-            `<li><b>${i + 1}</b><div><span class="zh" lang="zh-CN">${esc(p.scene)}</span><span class="ko">${esc(
-              p.sceneKo
-            )}</span></div></li>`
-        )
+        .map((p, i) => `<li><b>${i + 1}</b><div><span class="zh" lang="zh-CN">${esc(p.scene)}</span></div></li>`)
         .join("")}</ul>`
     : "";
-  const useful = `<ul class="useful">${w.useful
-    .map(
-      (u) =>
-        `<li><span class="zh" lang="zh-CN">${esc(u.w)}</span> <span class="p">${esc(u.p)}</span> ${esc(u.ko)}</li>`
-    )
-    .join("")}</ul>`;
   const n = countCjk(ans.writing.text);
   return `<section class="block">
-    <div class="block-head"><h2>쓰기</h2><span class="counter">${w.minChars}자 이상</span></div>
+    <div class="block-head"><h2 class="zh" lang="zh-CN">写作</h2><span class="counter">${w.minChars}字以上</span></div>
     <p class="passage zh" lang="zh-CN">${esc(w.prompt)}</p>
-    <p class="ko-line">${esc(w.promptKo)}</p>
     ${panels}
-    ${useful}
-    <label for="wtext">중국어로 직접 써 보세요</label>
-    <textarea id="wtext" lang="zh-CN" class="zh" placeholder="여기에 작문">${esc(ans.writing.text)}</textarea>
-    <p class="count${n >= w.minChars ? " enough" : ""}" id="wcount">${n}자 / ${w.minChars}자</p>
+    <label for="wtext" class="zh" lang="zh-CN">请在下面写作文</label>
+    <textarea id="wtext" lang="zh-CN" class="zh" placeholder="从这里开始">${esc(ans.writing.text)}</textarea>
+    <p class="count${n >= w.minChars ? " enough" : ""}" id="wcount">${n} / ${w.minChars}字</p>
   </section>`;
 }
 
@@ -175,9 +165,10 @@ export function renderDrill(set, ans, view) {
   const parts = [seqSection(set, ans), orderSection(set, ans, view), clozeSection(set, ans, view)];
   if (set.writing) parts.push(writingSection(set, ans));
   const ready = isComplete(set, ans);
+  // 단추도 중국어다. 문제를 푸는 화면에는 한국어를 한 글자도 두지 않는다
   parts.push(
-    `<button type="button" class="primary-btn" data-act="grade"${ready ? "" : " disabled"}>${
-      ready ? "채점하고 해설 보기" : "모두 채우면 채점할 수 있습니다"
+    `<button type="button" class="primary-btn zh" lang="zh-CN" data-act="grade"${ready ? "" : " disabled"}>${
+      ready ? "交卷，看答案" : "全部做完才能交卷"
     }</button>`
   );
   return parts.join("");

@@ -86,7 +86,7 @@ export function renderReading(rd, ans, view) {
         .join("");
       // 문항 화면에는 한국어를 넣지 않는다. 실제 시험지에 없는 것은 여기에도 없어야 한다.
       return `<div class="q">
-        <p class="q-no">${q.no}번</p>
+        <p class="q-no zh" lang="zh-CN">第${q.no}题</p>
         <p class="q-zh zh" lang="zh-CN">${esc(q.q)}</p>
         <div class="opts">${opts}</div>
       </div>`;
@@ -95,15 +95,15 @@ export function renderReading(rd, ans, view) {
 
   const ready = readingComplete(rd, ans);
   return `<section class="block">
-    <div class="block-head"><h2>긴 지문</h2><span class="counter">${p.questions.length}문항</span></div>
+    <div class="block-head"><h2 class="zh" lang="zh-CN">阅读</h2><span class="counter">${p.questions.length}题</span></div>
     <div id="rdText" class="rd-text zh" lang="zh-CN">${paragraphs(p.text)}</div>
   </section>
   <section class="block">
-    <div class="block-head"><h2>문항</h2></div>
+    <div class="block-head"><h2 class="zh" lang="zh-CN">问题</h2></div>
     ${qs}
   </section>
-  <button type="button" class="primary-btn" data-act="rd-grade"${ready ? "" : " disabled"}>${
-    ready ? "채점하고 해설 보기" : "네 문항을 다 고르면 채점할 수 있습니다"
+  <button type="button" class="primary-btn zh" lang="zh-CN" data-act="rd-grade"${ready ? "" : " disabled"}>${
+    ready ? "交卷，看答案" : "四题都选完才能交卷"
   }</button>`;
 }
 
