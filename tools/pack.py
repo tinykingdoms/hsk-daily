@@ -10,6 +10,7 @@ sw.js 의 캐시 이름에는 문항 내용의 해시를 박는다. 문항을 �
 
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -62,7 +63,19 @@ def main():
             h.update(p.read_bytes())
     tag = h.hexdigest()[:8]
 
+    # 오프라인 목록은 파일을 늘리면서 빠트리기 쉬운 자리다. 빠지면 지하철에서만 틀어진다.
     sw = (ROOT / "sw.js").read_text(encoding="utf-8")
+    shell = set(re.findall(r'"([^"]+)"', sw[sw.index("const SHELL"):sw.index("];")]))
+    need = sorted(
+        p.relative_to(OUT).as_posix()
+        for p in OUT.rglob("*")
+        if p.is_file() and p.suffix in (".js", ".json") and p.name != "sw.js"
+    )
+    missing = [n for n in need if n not in shell]
+    if missing:
+        print("sw.js 의 SHELL 에 빠진 파일:", ", ".join(missing))
+        return 1
+
     old = 'const CACHE = "hsk-daily-6";'
     if old not in sw:
         print("sw.js 의 CACHE 줄을 찾지 못했다. pack.py 를 고쳐야 한다.")
