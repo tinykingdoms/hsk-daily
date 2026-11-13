@@ -181,7 +181,6 @@ function render() {
   } else if (set.weekend && !forceWeekday) {
     main.innerHTML = `<section class="block">
       <div class="block-head"><h2>주말</h2></div>
-      <p class="hint">주말은 모의고사 날입니다. 이 앱은 평일에 감을 잡아 두는 쪽이라 오늘은 쉬어도 됩니다.</p>
       <div class="row-btns">
         <button type="button" data-act="anyway">그래도 한 세트 풀기</button>
         <button type="button" data-act="record">기록 보기</button>
@@ -246,8 +245,6 @@ function leftCount() {
 function exhaustedView() {
   return `<section class="block">
     <div class="block-head"><h2>남은 문항이 없습니다</h2></div>
-    <p class="hint">준비된 문항을 전부 풀었습니다. 새로 낼 것이 없습니다.</p>
-    <div class="note-box"><p>본 문항을 다시 열 수는 있습니다. 다만 해설을 읽은 문항이라 답이 기억날 겁니다. 새 문항을 넣는 쪽이 낫습니다.</p></div>
     <div class="row-btns">
       <button type="button" data-act="record">기록 보기</button>
       <button type="button" data-act="reopen">본 문항 다시 열기</button>
@@ -323,7 +320,6 @@ function recordView() {
   </section>
   <section class="block">
     <div class="block-head"><h2>기록 옮기기</h2></div>
-    <div class="note-box"><p>기록은 이 기기의 브라우저에만 쌓입니다. PC와 폰은 따로 쌓입니다. 한 번 나온 문항은 다시 나오지 않으니, 기기를 옮길 때는 내보내기로 가져가세요.</p></div>
     <div class="row-btns">
       <button type="button" data-act="export">내보내기</button>
       <button type="button" data-act="import">가져오기</button>

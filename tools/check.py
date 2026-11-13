@@ -301,6 +301,9 @@ def check_writing(doc):
             fail(w, f"모범답안이 {len(re.findall(CJK, it['model']))}자, {it['minChars']}자 이상이어야 한다")
         if not it.get("checklist"):
             fail(w, "checklist 가 비었다")
+        for c in it.get("checklist", []):
+            if "세어 봤는지" in c or "자를 넘겼는지" in c:
+                fail(w, f"글자 수는 채점 화면이 세어 준다. 묻지 않아도 되는 항목이다: {c}")
         if not it.get("promptKo", "").strip():
             fail(w, "promptKo 가 비었다")
 
@@ -387,6 +390,64 @@ def check_reading(doc):
             seen_w.add(word)
             if not v.get("ko", "").strip():
                 fail(w, f"주요 어휘 '{word}' 의 뜻이 비었다")
+
+
+# ------------------------------------------------- 문제를 푸는 화면
+HANGUL = re.compile(r"[가-힣]")
+
+# 문제를 푸는 동안 눈에 들어오는 것을 그리는 자리. 여기에 한국어가 들어가면
+# 실제 시험지에 없는 것을 보면서 푸는 것이 된다. 번역이든 요령이든 마찬가지다.
+SCREENS = [("js/drill.js", None), ("js/reading.js", "renderReading"), ("js/app.js", "header")]
+
+
+def strip_comments(src):
+    """주석을 지운다.
+
+    제대로 된 자바스크립트 분석기를 쓰지 않는다. 정규식 리터럴과 따옴표 안의
+    따옴표에서 바로 틀어진다. 주석 줄을 걸러내는 데에는 이걸로 충분하고,
+    틀려도 검사가 느슨해질 뿐 없는 줄을 지어내지는 않는다.
+    """
+    src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+    out = []
+    for line in src.splitlines():
+        t = line.strip()
+        if t.startswith("//") or t.startswith("*"):
+            out.append("")
+            continue
+        # 줄 끝에 붙은 주석. 한국어가 들어 있을 때만 떼어낸다
+        at = line.find("//")
+        if at != -1 and HANGUL.search(line[at:]):
+            line = line[:at]
+        out.append(line)
+    return "\n".join(out)
+
+
+def one_function(src, name):
+    """export function 이름( 부터 칸 없이 닫는 중괄호까지."""
+    head = f"function {name}("
+    at = src.find(head)
+    if at == -1:
+        return None
+    end = src.find("\n}", at)
+    return src[at : end + 2] if end != -1 else src[at:]
+
+
+def check_screens():
+    for rel, fn in SCREENS:
+        path = ROOT / rel
+        if not path.exists():
+            fail(rel, "파일이 없다")
+            continue
+        src = strip_comments(path.read_text("utf-8"))
+        if fn:
+            src = one_function(src, fn)
+            if src is None:
+                fail(rel, f"{fn} 를 찾지 못했다. 검사가 비어 버린다")
+                continue
+        where = rel if not fn else f"{rel}/{fn}"
+        for line in src.splitlines():
+            if HANGUL.search(line):
+                fail(where, f"문제를 푸는 화면에 한국어가 있다: {line.strip()[:60]}")
 
 
 # ------------------------------------------------------- 쓰기 점검 규칙
@@ -559,6 +620,8 @@ def main():
         docs[name] = doc
         fn(doc)
         counts[name] = len(doc[key])
+
+    check_screens()
 
     wdoc = load("wrules.json")
     if wdoc is not None:

@@ -278,7 +278,6 @@ function writingCard(item, ans, flagged, wrules) {
       <li>문장 ${r.sents.length}개</li>
     </ul>
     ${r.findings.length ? `<ul class="finds">${findList(r.findings)}</ul>` : ""}
-    <div class="note-box"><p>여기서 보는 것은 규칙으로 판정되는 것뿐입니다. 글이 주제에 맞는지, 문장이 중국어답게 읽히는지는 아래 모범답안과 견주세요.</p></div>
     <p class="lead" style="margin:16px 0 6px">내가 쓴 글</p>
     <p class="answer-zh zh" lang="zh-CN" style="font-size:16px">${marked(text, r.findings)}</p>
     ${corrected}

@@ -178,7 +178,6 @@ export function renderReadingResult(rd, ans, flags, view) {
 export function readingExhausted() {
   return `<section class="block">
     <div class="block-head"><h2>남은 지문이 없습니다</h2></div>
-    <p class="hint">준비된 긴 지문을 전부 읽었습니다.</p>
     <div class="row-btns">
       <button type="button" class="primary-btn" data-act="back">오늘 세트로</button>
       <button type="button" data-act="record">기록 보기</button>
