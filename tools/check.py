@@ -157,6 +157,27 @@ def check_chinese(where, text):
         warn(where, f"'{tok}'({lvl}급) 이 글 안에 보인다. 실제로 그 단어면 고쳐야 한다")
 
 
+# 보기 밑에 붙는 note 는 그 보기의 해석이다. 왜 그게 답인지, 어디에 나오는지 적는
+# 자리가 아니다. 설명을 적으면 보기를 읽기 전에 답이 보이고, 중국어를 읽는 연습이
+# 아니라 한국어 설명을 읽는 연습이 된다.
+NOT_A_NOTE = ["본문", "빈칸", "선택지", "정답", "오답", "문맥", "근거", "앞 문장", "뒤 문장", "글 전체"]
+
+
+def check_note(where, opt):
+    t = opt.get("t", "")
+    note = (opt.get("note") or "").strip()
+    if not note:
+        fail(where, f"선택지 '{t}' 의 해석이 비었다")
+        return
+    for w in NOT_A_NOTE:
+        if w in note:
+            fail(where, f"선택지 '{t}' 의 note 가 해석이 아니라 설명이다 ('{w}'): {note}")
+    # 해석은 원문 길이를 크게 넘지 않는다. 넘으면 뜻풀이가 아니라 설명이 섞인 것이다.
+    cap = max(20, int(3.5 * len(CJK.findall(t))))
+    if len(note) > cap:
+        fail(where, f"선택지 '{t}' 의 note 가 해석치고 길다 ({len(note)}자, {cap}자까지): {note}")
+
+
 def load(name):
     path = DATA / name
     if not path.exists():
@@ -267,8 +288,7 @@ def check_cloze(doc):
                 fail(bw, f"정답으로 표시된 선택지가 {len(oks)}개")
             for o in opts:
                 check_chinese(f"{bw}/{o['t']}", o["t"])
-                if not o.get("note", "").strip():
-                    fail(bw, f"선택지 '{o['t']}' 의 note 가 비었다")
+                check_note(bw, o)
         if not ps.get("ko", "").strip():
             fail(w, "ko (전체 번역) 가 비었다")
 
@@ -353,13 +373,7 @@ def check_reading(doc):
                 fail(qw, f"정답으로 표시된 선택지가 {len(oks)}개")
             for o in opts:
                 check_chinese(f"{qw}/{o.get('t', '?')}", o.get("t", ""))
-                if not o.get("note", "").strip():
-                    fail(qw, f"선택지 '{o.get('t')}' 의 note 가 비었다")
-            # 해설은 보기가 무슨 뜻인지 적는 자리다. '본문에 나온다', '본문에 없다' 는
-            # 읽으나 마나 한 말이라 자리만 차지한다.
-            for o in opts:
-                if "본문" in o.get("note", ""):
-                    fail(qw, f"선택지 '{o.get('t')}' 의 note 가 해석이 아니라 본문 이야기다")
+                check_note(qw, o)
             # 정답은 본문에서 가져오니 길어지고, 오답은 지어내니 짧아진다. 그대로 두면
             # 본문을 읽지 않고 제일 긴 것만 골라도 맞는다. 그러면 읽기 연습이 아니다.
             if len(oks) == 1:
