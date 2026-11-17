@@ -432,6 +432,7 @@ mark.m-look { padding: 0 1px; border-radius: 3px; background: var(--accent-soft)
 }
 
 .parts .zh { display: block; font-size: 16px; }
+.parts .p-ko { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-2); }
 .parts .role { display: block; margin-top: 1px; font-size: 11px; color: var(--ink-3); }
 .parts li[data-role="subject"] { border-top-color: var(--subject); }
 .parts li[data-role="predicate"] { border-top-color: var(--predicate); }
@@ -458,6 +459,16 @@ mark.m-look { padding: 0 1px; border-radius: 3px; background: var(--accent-soft)
 .rules { margin: 14px 0 0; padding-left: 18px; }
 .rules li { margin-bottom: 5px; font-size: 14px; color: var(--ink-2); }
 .rules li:last-child { margin-bottom: 0; }
+
+.keep { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.keep-head { margin: 0 0 8px; font-size: 11px; letter-spacing: 0.06em; color: var(--ink-3); }
+.keep ul { margin: 0; padding: 0; list-style: none; }
+.keep li { margin-top: 10px; }
+.keep li:first-child { margin-top: 0; }
+.k-line { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.k-line .zh { font-size: 16px; }
+.k-ko { font-size: 13px; color: var(--ink-2); }
+.k-use { margin: 2px 0 0; font-size: 13px; line-height: 1.7; color: var(--ink-3); }
 
 .chain { margin: 12px 0 0; display: grid; gap: 8px; }
 

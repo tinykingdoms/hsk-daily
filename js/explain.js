@@ -52,11 +52,27 @@ function orderCard(item, mine, flagged) {
   const parts = target
     .map((ci) => {
       const r = item.roles[ci];
+      const ko = (item.chunkKo && item.chunkKo[ci]) || "";
       return `<li data-role="${roleClass(r)}"><span class="zh" lang="zh-CN">${esc(
         item.chunks[ci]
-      )}</span><span class="role">${esc(r)}</span></li>`;
+      )}</span>${ko ? `<span class="p-ko">${esc(ko)}</span>` : ""}<span class="role">${esc(r)}</span></li>`;
     })
     .join("");
+
+  // 이 문장에서 가져갈 말. 문항은 하루 지나면 잊어도, 여기 적힌 말은 다음 문장에서 또 나온다
+  const keep = (item.keep || []).length
+    ? `<div class="keep">
+        <p class="keep-head">외워 둘 말</p>
+        <ul>${item.keep
+          .map(
+            (k) =>
+              `<li><p class="k-line"><span class="zh" lang="zh-CN">${esc(k.zh)}</span><span class="k-ko">${esc(
+                k.ko
+              )}</span></p><p class="k-use">${esc(k.use)}</p></li>`
+          )
+          .join("")}</ul>
+      </div>`
+    : "";
 
   const alt =
     ok && which > 0
@@ -77,9 +93,9 @@ function orderCard(item, mine, flagged) {
           mism.map((m) => (m ? "good" : ""))
         )}</div></div>
       </div>
-      <p class="lead" style="margin:12px 0 0">처음 어긋난 자리는 ${first + 1}번째입니다. 거기에는 ${esc(
+      <p class="lead" style="margin:12px 0 0">${first + 1}번째부터 순서가 다릅니다. 그 자리에는 ${esc(
         item.roles[target[first]]
-      )}인 <span class="zh" lang="zh-CN">${esc(item.chunks[target[first]])}</span>가 와야 합니다.</p>`;
+      )}인 <span class="zh" lang="zh-CN">${esc(item.chunks[target[first]])}</span>가 옵니다.</p>`;
 
   return `<div class="ex ${ok ? "right" : "wrong"}">
     <div class="ex-head">
@@ -92,6 +108,7 @@ function orderCard(item, mine, flagged) {
     <ul class="parts">${parts}</ul>
     ${diff}
     <ul class="rules">${item.rules.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>
+    ${keep}
     ${flagBtn(item.id, flagged)}
   </div>`;
 }
@@ -148,7 +165,7 @@ function clozeCard(passage, mine, flagged, view) {
       const pick = mine[b.no];
       const ok = gradeCloze(b, pick);
       // 풀 때 본 차례와 글자를 그대로 쓴다. 저장된 차례대로 보여 주면 정답이 늘
-      // A 자리에 오고, 내가 고른 글자와도 어긋나서 어느 것을 골랐는지 헷갈린다.
+      // A 자리에 오고, 내가 고른 글자와도 달라서 어느 것을 골랐는지 헷갈린다.
       const shown = (view && view.cloze[b.no]) || b.options.map((_, i) => i);
       const opts = shown
         .map((oi, pos) => {

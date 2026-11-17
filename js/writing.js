@@ -153,7 +153,7 @@ export function checkWriting(text, item, wrules) {
     }
   }
 
-  // 한 문장에 다 넣으려고 하면 어디선가 어긋난다. 끊는 쪽이 늘 안전하다
+  // 한 문장에 다 넣으려고 하면 어디선가 틀린다. 끊어 쓰는 쪽이 늘 안전하다
   for (const s of sents) {
     const len = countCjk(s.s);
     if (len > LONG_SENTENCE) {

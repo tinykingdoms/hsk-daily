@@ -205,8 +205,21 @@ def check_order(doc):
         for i, r in enumerate(it["roles"]):
             if not r.strip():
                 fail(w, f"roles[{i}] 가 비었다")
+        ck = it.get("chunkKo", [])
+        if len(ck) != n:
+            fail(w, f"chunkKo {len(ck)}개, chunks {n}개 (길이가 같아야 한다)")
+        for i, k in enumerate(ck):
+            if not k.strip():
+                fail(w, f"chunkKo[{i}] 가 비었다. 조각마다 뜻이 있어야 한다")
+        keep = it.get("keep", [])
+        if not 1 <= len(keep) <= 2:
+            fail(w, f"keep 이 {len(keep)}개 (1개나 2개여야 한다)")
+        for i, k in enumerate(keep):
+            for f in ("zh", "ko", "use"):
+                if not k.get(f, "").strip():
+                    fail(w, f"keep[{i}] 의 {f} 가 비었다")
         if not it.get("rules"):
-            fail(w, "rules 가 비었다 (어긋난 자리에 붙일 규칙이 없으면 해설을 만들 수 없다)")
+            fail(w, "rules 가 비었다 (틀린 자리에 붙일 규칙이 없으면 해설을 만들 수 없다)")
         if not it.get("answers"):
             fail(w, "answers 가 비었다")
         for k, ans in enumerate(it["answers"]):
@@ -404,6 +417,34 @@ def check_reading(doc):
             seen_w.add(word)
             if not v.get("ko", "").strip():
                 fail(w, f"주요 어휘 '{word}' 의 뜻이 비었다")
+
+
+# ------------------------------------------------------- 앱이 쓰는 말투
+# 화면에 나가는 말과 코드 주석은 사람이 옆에서 말하듯 쓴다. 아래 말들은 무슨 일이
+# 일어났는지를 그림으로 바꿔 놓아서, 읽는 쪽이 한 번 더 풀어야 한다.
+VAGUE = ["어긋", "침묵", "깃들", "스며", "맞물", "잠재", "메아리"]
+
+# 번역문에는 이런 말이 그대로 나올 수 있다. 앱이 제 목소리로 쓰는 자리만 본다.
+VOICE_FILES = ["js/app.js", "js/drill.js", "js/explain.js", "js/reading.js", "js/writing.js",
+               "js/store.js", "js/daily.js", "index.html"]
+
+
+def check_voice(odoc):
+    for rel in VOICE_FILES:
+        path = ROOT / rel
+        if not path.exists():
+            continue
+        for i, line in enumerate(path.read_text("utf-8").splitlines(), 1):
+            for v in VAGUE:
+                if v in line:
+                    fail(f"{rel}:{i}", f"그림으로 돌려 쓴 말 '{v}'. 무슨 일이 일어나는지 그대로 적는다")
+    if not odoc:
+        return
+    for it in odoc["items"]:
+        for r in it.get("rules", []):
+            for v in VAGUE:
+                if v in r:
+                    fail(f"order/{it['id']}", f"rules 에 그림으로 돌려 쓴 말 '{v}': {r[:40]}")
 
 
 # ------------------------------------------------- 문제를 푸는 화면
@@ -636,6 +677,7 @@ def main():
         counts[name] = len(doc[key])
 
     check_screens()
+    check_voice(docs.get("order.json"))
 
     wdoc = load("wrules.json")
     if wdoc is not None:
