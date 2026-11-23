@@ -5,6 +5,7 @@ import {
 import { buildDay, seedSeen } from "./daily.js";
 import { renderDrill, buildView, emptyAnswers, isComplete, countCjk, esc } from "./drill.js";
 import { renderResult, gradeOrder, gradeSequence, gradeCloze } from "./explain.js";
+import { gradeWriting, setApiKey } from "./writing.js";
 import {
   buildReading, buildReadingView, emptyReadingAnswers, readingComplete,
   gradeReadingQuestion, renderReading, renderReadingResult, readingExhausted,
@@ -17,6 +18,8 @@ let data, state, set, view, ans;
 let rd, rdView, rdAns;
 let route = "drill";
 let forceWeekday = false;
+// 모델 채점은 한 번 받으면 기록에 남는다. 같은 글을 두 번 보내지 않는다.
+let mark = { id: null, state: "idle" };
 
 // 제목줄도 문제를 푸는 동안 눈에 들어온다. 그래서 여기도 중국어로 둔다.
 const WEEK = ["日", "一", "二", "三", "四", "五", "六"];
@@ -117,6 +120,37 @@ function startDay() {
     ans = emptyAnswers(set);
   }
   route = "drill";
+  mark = { id: null, state: "idle" };
+  render();
+}
+
+/**
+ * 이 작문에 대한 채점 상태.
+ *
+ * 받아 둔 채점이 있고 글이 그때와 같으면 그걸 다시 쓴다. 글은 채점 화면에서
+ * 고칠 수 없으니, 같은 글을 다시 보내는 것은 돈만 쓰는 일이다.
+ */
+function writingMark() {
+  if (!set.writing) return { state: "idle" };
+  if (mark.id === set.writing.id) return mark;
+  const kept = (state.graded || {})[set.writing.id];
+  if (kept && kept.text === (ans.writing.text || "")) return { state: "done", grade: kept.grade };
+  return { state: "idle" };
+}
+
+async function askGrade() {
+  const item = set.writing;
+  mark = { id: item.id, state: "busy" };
+  render();
+  try {
+    const grade = await gradeWriting(item, ans.writing.text || "");
+    state.graded = state.graded || {};
+    state.graded[item.id] = { text: ans.writing.text || "", grade, at: Date.now() };
+    save(state);
+    mark = { id: item.id, state: "done", grade };
+  } catch (e) {
+    mark = { id: item.id, state: "error", error: e.message };
+  }
   render();
 }
 
@@ -177,7 +211,7 @@ function render() {
   } else if (set.exhausted) {
     main.innerHTML = exhaustedView();
   } else if (route === "result") {
-    main.innerHTML = renderResult(set, ans, state.flags, view, data.wrules);
+    main.innerHTML = renderResult(set, ans, state.flags, view, data.wrules, writingMark());
   } else if (set.weekend && !forceWeekday) {
     main.innerHTML = `<section class="block">
       <div class="block-head"><h2>주말</h2></div>
@@ -362,6 +396,18 @@ main.addEventListener("click", (e) => {
   } else if (act === "grade") {
     if (!isComplete(set, ans)) return;
     grade();
+    return;
+  } else if (act === "save-key") {
+    const box = document.getElementById("apikey");
+    if (!box || !box.value.trim()) return;
+    setApiKey(box.value);
+    askGrade();
+    return;
+  } else if (act === "drop-key") {
+    setApiKey("");
+    mark = { id: null, state: "idle" };
+  } else if (act === "grade-writing") {
+    askGrade();
     return;
   } else if (act === "record") {
     route = "record";

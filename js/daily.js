@@ -35,17 +35,6 @@ export function isWeekend(d = new Date()) {
   return w === 0 || w === 6;
 }
 
-/**
- * 쓰기가 붙는 날. 월요일과 금요일이다.
- *
- * 금요일만 쓰면 시험까지 금요일이 다섯 번뿐이라 쓰기 열 편 중 절반이 나오지 못한다.
- * 하루 한 세트를 전제로 짠 규칙이었다.
- */
-export function isWritingDay(d = new Date()) {
-  const w = d.getDay();
-  return w === 1 || w === 5;
-}
-
 // 문항을 꺼내는 순서. 씨앗이 고정이라 누가 언제 열어도 같은 순서로 나온다.
 const SEED = { sequence: 1101, order: 2202, cloze: 3303, writing: 4404 };
 
@@ -100,8 +89,11 @@ export function buildDay(data, state, now = new Date(), n = 0) {
   set.exhausted = !set.sequence || !set.cloze || set.order.length < 3;
   if (set.exhausted) return set;
 
-  // 쓰기는 월요일과 금요일 첫 세트에만. 하루에 두 편을 쓰게 하지는 않는다.
-  if (isWritingDay(now) && n === 0 && left.writing.length) {
+  // 쓰기는 날마다 첫 세트에 한 편. 하루에 두 편을 쓰게 하지는 않는다.
+  //
+  // 전에는 월요일과 금요일에만 붙였다. 쓰기는 주에 두 번으로는 늘지 않는다.
+  // 200자를 채우는 일이 매일 해야 손에 붙는다.
+  if (n === 0 && left.writing.length) {
     set.writing = byId(data.writing.items, left.writing[0]);
   }
 

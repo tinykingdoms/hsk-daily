@@ -565,3 +565,28 @@ label { display: block; font-size: 13px; color: var(--ink-2); margin-bottom: 4px
 .vocab li:last-child { border-bottom: 0; padding-bottom: 0; }
 .vocab .zh { font-size: 16px; font-weight: 650; }
 .vocab .v-ko { font-size: 14px; color: var(--ink-2); }
+
+/* ------------------------------------------------------------- 모델 채점 */
+/* 기계 점검이 못 보는 것만 여기 나온다. 고칠 곳은 위의 지적과 같은 모양으로 둔다 */
+.keyform { margin-top: 2px; }
+.k-note { margin: 0 0 10px; font-size: 13px; line-height: 1.7; color: var(--ink-3); }
+.keyform input {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+}
+.keyform button { margin-top: 10px; }
+
+.g-verdict { margin: 0 0 12px; font-size: 15px; line-height: 1.7; }
+.g-none { margin: 0; font-size: 14px; color: var(--ok); }
+.g-error { margin: 0 0 10px; font-size: 14px; line-height: 1.7; color: var(--no); }
+.g-error + button { margin-right: 8px; }
+
+.g-used { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 14px 0 0; }
+.g-tag { flex: 0 0 auto; font-size: 11px; letter-spacing: 0.06em; color: var(--ink-3); }
+.g-used .zh { font-size: 15px; color: var(--ok); }

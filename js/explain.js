@@ -1,5 +1,5 @@
 import { esc } from "./drill.js";
-import { checkWriting, applyFixes } from "./writing.js";
+import { checkWriting, applyFixes, apiKey } from "./writing.js";
 
 const KEYS = ["A", "B", "C", "D", "E"];
 
@@ -262,7 +262,58 @@ function findList(findings) {
  *
  * 문항 화면에서 뺀 것들(문제 번역, 쓸 만한 말, 네 컷 설명)이 여기로 왔다.
  */
-function writingCard(item, ans, flagged, wrules) {
+/**
+ * 모델이 보는 자리.
+ *
+ * 기계 점검이 못 보는 것만 여기서 본다. 주제에 맞게 썼는지, 중국어로 그렇게
+ * 말하는지다. 열쇠가 없으면 열쇠를 받는 칸이 먼저 나온다.
+ */
+function gradeBlock(mark) {
+  const head = `<p class="lead" style="margin:18px 0 6px">채점</p>`;
+  if (!apiKey()) {
+    return `${head}<div class="keyform">
+      <p class="k-note">쓴 글을 모델에게 보내서 고칠 곳을 받습니다. 열쇠는 이 기기에만 저장되고, 쓴 글은 채점할 때만 나갑니다.</p>
+      <input id="apikey" type="password" autocomplete="off" spellcheck="false" placeholder="Anthropic API 열쇠">
+      <button type="button" data-act="save-key">열쇠 저장</button>
+    </div>`;
+  }
+  if (mark.state === "busy") {
+    return `${head}<p class="empty">채점 중입니다. 삼십 초쯤 걸립니다.</p>`;
+  }
+  if (mark.state === "error") {
+    return `${head}<p class="g-error">${esc(mark.error)}</p>
+      <button type="button" data-act="grade-writing">다시 받기</button>
+      <button type="button" class="ghost-btn" data-act="drop-key">열쇠 지우기</button>`;
+  }
+  if (mark.state !== "done") {
+    return `${head}<button type="button" data-act="grade-writing">채점 받기</button>`;
+  }
+  const g = mark.grade;
+  const fixes = g.fixes.length
+    ? `<div class="find-group f-fix"><ul class="finds">${g.fixes
+        .map(
+          (f) => `<li>
+            <p class="f-why">${esc(f.why)}</p>
+            <p class="f-swap"><span class="zh bad" lang="zh-CN">${esc(f.bad)}</span><span class="arrow">→</span>${
+              f.good ? `<span class="zh good" lang="zh-CN">${esc(f.good)}</span>` : `<span class="good">빼기</span>`
+            }</p>
+          </li>`
+        )
+        .join("")}</ul></div>`
+    : `<p class="g-none">고칠 중국어는 없습니다.</p>`;
+  const used = g.used.length
+    ? `<p class="g-used"><span class="g-tag">맞게 쓴 것</span><span class="zh" lang="zh-CN">${g.used
+        .map(esc)
+        .join("，")}</span></p>`
+    : "";
+  return `${head}
+    <p class="g-verdict">${esc(g.verdict)}</p>
+    ${fixes}
+    ${g.content.length ? `<ul class="rules">${g.content.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
+    ${used}`;
+}
+
+function writingCard(item, ans, flagged, wrules, mark) {
   const text = ans.text || "";
   const r = checkWriting(text, item, wrules);
   const nFix = r.findings.filter((f) => f.level === "fix").length;
@@ -298,6 +349,7 @@ function writingCard(item, ans, flagged, wrules) {
     <p class="lead" style="margin:16px 0 6px">내가 쓴 글</p>
     <p class="answer-zh zh" lang="zh-CN" style="font-size:16px">${marked(text, r.findings)}</p>
     ${corrected}
+    ${gradeBlock(mark)}
     ${modelBlock(item)}
     ${flagBtn(item.id, flagged)}
   </div>`;
@@ -331,7 +383,7 @@ function modelBlock(item) {
     <ul class="rules" style="margin-top:16px">${item.checklist.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>`;
 }
 
-export function renderResult(set, ans, flags, view, wrules) {
+export function renderResult(set, ans, flags, view, wrules, mark) {
   const flagged = new Set(flags.map((f) => f.id));
   const seqHits = gradeSequence(set.sequence, ans.sequence).filter(Boolean).length;
   const ordHits = set.order.filter((it) => gradeOrder(it, ans.order[it.id]).ok).length;
@@ -361,7 +413,7 @@ export function renderResult(set, ans, flags, view, wrules) {
   if (set.writing) {
     out.push(`<section class="block">
       <div class="block-head"><h2>쓰기</h2></div>
-      ${writingCard(set.writing, ans.writing, flagged.has(set.writing.id), wrules)}
+      ${writingCard(set.writing, ans.writing, flagged.has(set.writing.id), wrules, mark || { state: "idle" })}
     </section>`);
   }
   out.push(`<div class="row-btns">

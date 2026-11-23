@@ -190,6 +190,163 @@ export function checkWriting(text, item, wrules) {
   };
 }
 
+/* ------------------------------------------------------------- 모델 채점
+ *
+ * 위의 점검은 규칙으로 확실히 판정되는 것만 본다. 주제에 맞게 썼는지, 문장이
+ * 중국어답게 읽히는지는 규칙으로 볼 수 없는데, 작문에서 점수가 갈리는 자리가
+ * 바로 거기다. 그 한 가지만 바깥에 물어본다.
+ *
+ * 서버가 없으니 요청도 이 기기에서 바로 나간다. 브라우저에서 직접 부르는 요청은
+ * anthropic-dangerous-direct-browser-access 헤더가 있어야 API 가 받아 준다.
+ * 열쇠는 이 기기의 localStorage 에만 두고 어디에도 보내지 않는다.
+ */
+
+const KEY_SLOT = "hsk-daily-apikey";
+const API_URL = "https://api.anthropic.com/v1/messages";
+const MODEL = "claude-opus-5-5";
+
+export function apiKey() {
+  try {
+    return (localStorage.getItem(KEY_SLOT) || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+export function setApiKey(v) {
+  try {
+    const t = (v || "").trim();
+    if (t) localStorage.setItem(KEY_SLOT, t);
+    else localStorage.removeItem(KEY_SLOT);
+  } catch {
+    /* 저장이 막힌 환경에서는 이번 한 번만 쓰고 잊는다 */
+  }
+}
+
+// 돌아오는 모양을 고정해 둔다. 줄글로 받으면 화면에 붙일 때마다 다르게 끊긴다.
+const SCHEMA = {
+  type: "object",
+  properties: {
+    verdict: { type: "string" },
+    fixes: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          bad: { type: "string" },
+          good: { type: "string" },
+          why: { type: "string" },
+        },
+        required: ["bad", "good", "why"],
+        additionalProperties: false,
+      },
+    },
+    content: { type: "array", items: { type: "string" } },
+    used: { type: "array", items: { type: "string" } },
+  },
+  required: ["verdict", "fixes", "content", "used"],
+  additionalProperties: false,
+};
+
+const SYSTEM = `HSK 5급 쓰기 답안을 채점한다. 쓴 사람은 한국어를 쓰는 학습자다.
+
+fixes 에 적을 것
+- 확실히 틀린 중국어, 또는 중국어로 그렇게 말하지 않는 표현만 적는다.
+- 취향 차이와 더 멋있는 표현은 적지 않는다. 틀리지 않은 것을 고치라고 하면 틀린 쪽을 외운다.
+- bad 는 답안에 있는 글자를 그대로 잘라 온다. 다듬어서 옮기지 않는다.
+- good 은 고친 중국어다. 빼야 하는 말이면 빈 문자열로 둔다.
+- why 는 한국어 한 줄이다. 왜 틀렸는지만 적는다.
+
+content 에 적을 것
+- 내용과 구성에 대한 한국어 한 줄 항목 두 개에서 네 개.
+- 문제가 요구한 것을 다 썼는지, 빠진 것이 무엇인지, 어디를 늘리면 되는지.
+
+used 에 적을 것
+- 답안이 실제로 맞게 쓴 5급 어법이나 표현을 중국어로 적는다. 없으면 빈 배열로 둔다.
+
+verdict
+- 이 답안이 지금 어떤 상태인지 한국어 한 줄.
+
+말투
+- 사람이 옆에서 말하듯 짧게 쓴다. 한 문장에 한 가지만 적는다.
+- 줄표는 쓰지 않는다.
+- 칭찬과 격려는 적지 않는다. 사실만 적는다.`;
+
+/**
+ * 쓴 글을 모델에게 보내고 채점 결과를 받는다.
+ *
+ * 실패하면 API 가 보낸 말을 그대로 던진다. 열쇠가 틀렸는지, 작업공간을 적어야
+ * 하는지, 이 조직이 브라우저 요청을 막아 두었는지는 그 말에 적혀 있다.
+ */
+export async function gradeWriting(item, text) {
+  const key = apiKey();
+  if (!key) throw new Error("API 열쇠가 없습니다");
+
+  const ask = [
+    `문제: ${item.prompt}`,
+    `${item.minChars}자 이상`,
+    item.panels ? `네 장면: ${item.panels.map((p, i) => `${i + 1} ${p.scene}`).join(" / ")}` : "",
+    `볼 것: ${item.checklist.join(" / ")}`,
+    "",
+    "답안",
+    text,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const stop = new AbortController();
+  const timer = setTimeout(() => stop.abort(), 120000);
+  let res;
+  try {
+    res = await fetch(API_URL, {
+      method: "POST",
+      signal: stop.signal,
+      headers: {
+        "content-type": "application/json",
+        "anthropic-version": "2026-10-21",
+        "anthropic-beta": "server-side-fallback-2026-07-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+        "x-api-key": key,
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 16000,
+        system: SYSTEM,
+        messages: [{ role: "user", content: ask }],
+        thinking: { type: "adaptive" },
+        output_config: { effort: "medium", format: { type: "json_schema", schema: SCHEMA } },
+        fallbacks: "default",
+      }),
+    });
+  } catch (e) {
+    clearTimeout(timer);
+    throw new Error(e.name === "AbortError" ? "2분 안에 답이 오지 않았습니다" : `보내지 못했습니다. ${e.message}`);
+  }
+  clearTimeout(timer);
+
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error((body && body.error && body.error.message) || `${res.status} 응답`);
+  }
+  if (body.stop_reason === "refusal") throw new Error("모델이 이 글을 채점하지 않았습니다");
+
+  const block = (body.content || []).find((b) => b.type === "text");
+  if (!block) throw new Error("채점 결과가 비어서 왔습니다");
+  let out;
+  try {
+    out = JSON.parse(block.text);
+  } catch {
+    throw new Error("채점 결과를 읽지 못했습니다");
+  }
+  return {
+    verdict: out.verdict || "",
+    // 고친 모양이 원문과 같으면 고칠 곳이 아니다. 화살표만 그려지고 읽을 것이 없다.
+    fixes: (out.fixes || []).filter((f) => f.bad && f.good !== f.bad),
+    content: (out.content || []).filter(Boolean),
+    used: (out.used || []).filter(Boolean),
+  };
+}
+
 /** fix 가 있는 규칙을 전부 적용한 글. 눈으로 견주기 위한 것이다. */
 export function applyFixes(text, wrules) {
   const west = (wrules && wrules.halfwidth) || {};

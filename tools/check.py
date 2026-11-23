@@ -339,6 +339,15 @@ def check_writing(doc):
                 fail(w, f"글자 수는 채점 화면이 세어 준다. 묻지 않아도 되는 항목이다: {c}")
         if not it.get("promptKo", "").strip():
             fail(w, "promptKo 가 비었다")
+        if not it.get("modelKo", "").strip():
+            fail(w, "modelKo 가 비었다. 모범답안은 해석까지 있어야 읽힌다")
+        # 채점 화면이 쓸 만한 말을 그대로 그린다. 한 칸이라도 비면 그 자리가 빈칸으로 나간다.
+        if not it.get("useful"):
+            fail(w, "useful 이 비었다")
+        for i, u in enumerate(it.get("useful", [])):
+            for f in ("w", "p", "ko"):
+                if not u.get(f, "").strip():
+                    fail(w, f"useful[{i}] 의 {f} 가 비었다")
 
 
 # ------------------------------------------------------------- 긴 지문 읽기
