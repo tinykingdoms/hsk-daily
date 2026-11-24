@@ -14,11 +14,13 @@ export function buildView(set) {
       hashSeed(it.id + set.key)
     );
   }
-  for (const b of set.cloze.blanks) {
-    view.cloze[b.no] = shuffled(
-      b.options.map((_, i) => i),
-      hashSeed(set.cloze.id + ":" + b.no + set.key)
-    );
+  for (const p of set.cloze) {
+    for (const b of p.blanks) {
+      view.cloze[`${p.id}:${b.no}`] = shuffled(
+        b.options.map((_, i) => i),
+        hashSeed(p.id + ":" + b.no + set.key)
+      );
+    }
   }
   return view;
 }
@@ -26,42 +28,52 @@ export function buildView(set) {
 export function emptyAnswers(set) {
   return {
     order: Object.fromEntries(set.order.map((it) => [it.id, []])),
-    sequence: [null, null, null, null, null],
-    cloze: Object.fromEntries(set.cloze.blanks.map((b) => [b.no, null])),
+    sequence: Object.fromEntries(set.sequence.map((s) => [s.id, [null, null, null, null, null]])),
+    cloze: Object.fromEntries(set.cloze.flatMap((p) => p.blanks.map((b) => [`${p.id}:${b.no}`, null]))),
     writing: { text: "", seen: false },
   };
 }
 
 export function isComplete(set, ans) {
   const ordDone = set.order.every((it) => ans.order[it.id].length === it.chunks.length);
-  const seqDone = ans.sequence.every((x) => x !== null);
-  const clzDone = set.cloze.blanks.every((b) => ans.cloze[b.no] !== null);
+  const seqDone = set.sequence.every((s) => ans.sequence[s.id].every((x) => x !== null));
+  const clzDone = set.cloze.every((p) => p.blanks.every((b) => ans.cloze[`${p.id}:${b.no}`] !== null));
   return ordDone && seqDone && clzDone;
 }
 
 function seqSection(set, ans) {
-  const keys = Object.keys(set.sequence.segments).sort();
-  const slots = ans.sequence
-    .map(
-      (k, i) =>
-        `<button type="button" class="seq-slot${k ? " filled" : ""}" data-act="seq-clear" data-i="${i}">${
-          k || i + 1
-        }</button>`
-    )
-    .join("");
-  const segs = keys
-    .map(
-      (k) =>
-        `<button type="button" class="seg${ans.sequence.includes(k) ? " used" : ""}" data-act="seq-pick" data-key="${k}">
+  const qs = set.sequence
+    .map((s, qi) => {
+      const mine = ans.sequence[s.id];
+      const slots = mine
+        .map(
+          (k, i) =>
+            `<button type="button" class="seq-slot${
+              k ? " filled" : ""
+            }" data-act="seq-clear" data-sid="${s.id}" data-i="${i}">${k || i + 1}</button>`
+        )
+        .join("");
+      const segs = Object.keys(s.segments)
+        .sort()
+        .map(
+          (k) =>
+            `<button type="button" class="seg${
+              mine.includes(k) ? " used" : ""
+            }" data-act="seq-pick" data-sid="${s.id}" data-key="${k}">
           <span class="seg-key">${k}</span>
-          <span class="seg-text zh" lang="zh-CN">${esc(set.sequence.segments[k])}</span>
+          <span class="seg-text zh" lang="zh-CN">${esc(s.segments[k])}</span>
         </button>`
-    )
+        )
+        .join("");
+      const no = set.sequence.length > 1 ? `<p class="q-no">${qi + 1} / ${set.sequence.length}</p>` : "";
+      return `<div class="q">${no}<div class="seq-slots">${slots}</div><div>${segs}</div></div>`;
+    })
     .join("");
   return `<section class="block">
-    <div class="block-head"><h2 class="zh" lang="zh-CN">排列顺序</h2><span class="counter">5题</span></div>
-    <div class="seq-slots">${slots}</div>
-    <div>${segs}</div>
+    <div class="block-head"><h2 class="zh" lang="zh-CN">排列顺序</h2><span class="counter">${
+      5 * set.sequence.length
+    }题</span></div>
+    ${qs}
   </section>`;
 }
 
@@ -98,37 +110,51 @@ function orderSection(set, ans, view) {
   </section>`;
 }
 
+export function clozeBase(set, pi) {
+  return set.cloze.slice(0, pi).reduce((s, p) => s + p.blanks.length, 0);
+}
+
 function clozeSection(set, ans, view) {
-  const p = set.cloze;
-  const text = esc(p.text).replace(
-    /\{\{(\d+)\}\}/g,
-    (_, no) =>
-      `<span class="hole${ans.cloze[no] !== null ? " filled" : ""}">${
-        ans.cloze[no] !== null
-          ? esc(p.blanks.find((b) => String(b.no) === no).options[ans.cloze[no]].t)
-          : `　${no}　`
-      }</span>`
-  );
-  const qs = p.blanks
-    .map((b) => {
-      const opts = view.cloze[b.no]
-        .map(
-          (oi, pos) =>
-            `<button type="button" class="opt${ans.cloze[b.no] === oi ? " picked" : ""}" data-act="clz" data-no="${
-              b.no
-            }" data-oi="${oi}">
+  const body = set.cloze
+    .map((p, pi) => {
+      const base = clozeBase(set, pi);
+      const at = (no) => `${p.id}:${no}`;
+      const text = esc(p.text).replace(
+        /\{\{(\d+)\}\}/g,
+        (_, no) =>
+          `<span class="hole${ans.cloze[at(no)] !== null ? " filled" : ""}">${
+            ans.cloze[at(no)] !== null
+              ? esc(p.blanks.find((b) => String(b.no) === no).options[ans.cloze[at(no)]].t)
+              : `　${base + Number(no)}　`
+          }</span>`
+      );
+      const qs = p.blanks
+        .map((b) => {
+          const opts = view.cloze[at(b.no)]
+            .map(
+              (oi, pos) =>
+                `<button type="button" class="opt${
+                  ans.cloze[at(b.no)] === oi ? " picked" : ""
+                }" data-act="clz" data-key="${at(b.no)}" data-oi="${oi}">
               <span class="opt-key">${KEYS[pos]}</span>
               <span class="opt-text zh" lang="zh-CN">${esc(b.options[oi].t)}</span>
             </button>`
-        )
+            )
+            .join("");
+          return `<div class="q"><p class="q-no zh" lang="zh-CN">第${
+            base + b.no
+          }题</p><div class="opts">${opts}</div></div>`;
+        })
         .join("");
-      return `<div class="q"><p class="q-no zh" lang="zh-CN">第${b.no}题</p><div class="opts">${opts}</div></div>`;
+      return `<p class="passage zh" lang="zh-CN">${text}</p>${qs}`;
     })
     .join("");
   return `<section class="block">
-    <div class="block-head"><h2 class="zh" lang="zh-CN">选词填空</h2><span class="counter">${p.blanks.length}题</span></div>
-    <p class="passage zh" lang="zh-CN">${text}</p>
-    ${qs}
+    <div class="block-head"><h2 class="zh" lang="zh-CN">选词填空</h2><span class="counter">${set.cloze.reduce(
+      (s, p) => s + p.blanks.length,
+      0
+    )}题</span></div>
+    ${body}
   </section>`;
 }
 

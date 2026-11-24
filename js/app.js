@@ -69,7 +69,7 @@ function busy() {
   if (!ans) return false;
   return (
     ans.writing.text.trim() !== "" ||
-    ans.sequence.some((x) => x !== null) ||
+    Object.values(ans.sequence).some((l) => l.some((x) => x !== null)) ||
     Object.values(ans.order).some((l) => l.length) ||
     Object.values(ans.cloze).some((x) => x !== null)
   );
@@ -241,7 +241,9 @@ function grade() {
   const first = !(set.id in state.sets);
   let got = 0;
 
-  got += gradeSequence(set.sequence, ans.sequence).filter(Boolean).length;
+  for (const q of set.sequence) {
+    got += gradeSequence(q, ans.sequence[q.id]).filter(Boolean).length;
+  }
 
   for (const it of set.order) {
     const ok = gradeOrder(it, ans.order[it.id]).ok;
@@ -249,14 +251,21 @@ function grade() {
     if (first) bumpStat(state, it.grammar, ok);
   }
 
-  for (const b of set.cloze.blanks) {
-    if (gradeCloze(b, ans.cloze[b.no])) got += 1;
+  for (const p of set.cloze) {
+    for (const b of p.blanks) {
+      if (gradeCloze(b, ans.cloze[`${p.id}:${b.no}`])) got += 1;
+    }
   }
 
   if (first) {
     markSeen(
       state,
-      [set.sequence.id, set.cloze.id, set.writing && set.writing.id, ...set.order.map((it) => it.id)],
+      [
+        ...set.sequence.map((q) => q.id),
+        ...set.cloze.map((p) => p.id),
+        set.writing && set.writing.id,
+        ...set.order.map((it) => it.id),
+      ],
       set.key
     );
   }
@@ -369,13 +378,18 @@ main.addEventListener("click", (e) => {
 
   if (act === "seq-pick") {
     const k = btn.dataset.key;
-    if (ans.sequence.includes(k)) return;
-    const i = ans.sequence.indexOf(null);
+    const mine = ans.sequence[btn.dataset.sid];
+    if (mine.includes(k)) return;
+    const i = mine.indexOf(null);
     if (i === -1) return;
-    ans.sequence[i] = k;
+    mine[i] = k;
   } else if (act === "seq-clear") {
-    ans.sequence[Number(btn.dataset.i)] = null;
-    ans.sequence = ans.sequence.filter((x) => x !== null).concat([null, null, null, null, null]).slice(0, 5);
+    const sid = btn.dataset.sid;
+    ans.sequence[sid][Number(btn.dataset.i)] = null;
+    ans.sequence[sid] = ans.sequence[sid]
+      .filter((x) => x !== null)
+      .concat([null, null, null, null, null])
+      .slice(0, 5);
   } else if (act === "ord-push") {
     const list = ans.order[btn.dataset.id];
     const ci = Number(btn.dataset.ci);
@@ -392,7 +406,7 @@ main.addEventListener("click", (e) => {
     startReading();
     return;
   } else if (act === "clz") {
-    ans.cloze[btn.dataset.no] = Number(btn.dataset.oi);
+    ans.cloze[btn.dataset.key] = Number(btn.dataset.oi);
   } else if (act === "grade") {
     if (!isComplete(set, ans)) return;
     grade();

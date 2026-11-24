@@ -1,4 +1,4 @@
-import { esc } from "./drill.js";
+import { esc, clozeBase } from "./drill.js";
 import { checkWriting, applyFixes, apiKey } from "./writing.js";
 
 const KEYS = ["A", "B", "C", "D", "E"];
@@ -159,14 +159,15 @@ export function gradeCloze(blank, pick) {
   return blank.options[pick] && blank.options[pick].ok === true;
 }
 
-function clozeCard(passage, mine, flagged, view) {
+function clozeCard(passage, mine, flagged, view, base) {
   const blanks = passage.blanks
     .map((b) => {
-      const pick = mine[b.no];
+      const at = `${passage.id}:${b.no}`;
+      const pick = mine[at];
       const ok = gradeCloze(b, pick);
       // 풀 때 본 차례와 글자를 그대로 쓴다. 저장된 차례대로 보여 주면 정답이 늘
       // A 자리에 오고, 내가 고른 글자와도 달라서 어느 것을 골랐는지 헷갈린다.
-      const shown = (view && view.cloze[b.no]) || b.options.map((_, i) => i);
+      const shown = (view && view.cloze[at]) || b.options.map((_, i) => i);
       const opts = shown
         .map((oi, pos) => {
           const o = b.options[oi];
@@ -178,7 +179,9 @@ function clozeCard(passage, mine, flagged, view) {
         .join("");
       return `<div class="ex ${ok ? "right" : "wrong"}">
         <div class="ex-head">
-          <span class="verdict ${ok ? "right" : "wrong"}">빈칸 ${b.no} ${ok ? "맞음" : "틀림"}</span>
+          <span class="verdict ${ok ? "right" : "wrong"}">빈칸 ${base + b.no} ${
+            ok ? "맞음" : "틀림"
+          }</span>
         </div>
         <ul class="opt-review">${opts}</ul>
       </div>`;
@@ -385,21 +388,29 @@ function modelBlock(item) {
 
 export function renderResult(set, ans, flags, view, wrules, mark) {
   const flagged = new Set(flags.map((f) => f.id));
-  const seqHits = gradeSequence(set.sequence, ans.sequence).filter(Boolean).length;
+  const seqTotal = 5 * set.sequence.length;
+  const clzTotal = set.cloze.reduce((s, p) => s + p.blanks.length, 0);
+  const seqHits = set.sequence.reduce(
+    (s, q) => s + gradeSequence(q, ans.sequence[q.id]).filter(Boolean).length,
+    0
+  );
   const ordHits = set.order.filter((it) => gradeOrder(it, ans.order[it.id]).ok).length;
-  const clzHits = set.cloze.blanks.filter((b) => gradeCloze(b, ans.cloze[b.no])).length;
-  const total = 5 + set.order.length + set.cloze.blanks.length;
+  const clzHits = set.cloze.reduce(
+    (s, p) => s + p.blanks.filter((b) => gradeCloze(b, ans.cloze[`${p.id}:${b.no}`])).length,
+    0
+  );
+  const total = seqTotal + set.order.length + clzTotal;
   const got = seqHits + ordHits + clzHits;
 
   const out = [
     `<section class="block">
-      <div class="score"><strong>${got} / ${total}</strong><span>단락 ${seqHits}/5 · 어순 ${ordHits}/${
+      <div class="score"><strong>${got} / ${total}</strong><span>단락 ${seqHits}/${seqTotal} · 어순 ${ordHits}/${
       set.order.length
-    } · 빈칸 ${clzHits}/${set.cloze.blanks.length}</span></div>
+    } · 빈칸 ${clzHits}/${clzTotal}</span></div>
     </section>`,
     `<section class="block">
       <div class="block-head"><h2>단락 배열</h2></div>
-      ${sequenceCard(set.sequence, ans.sequence, flagged.has(set.sequence.id))}
+      ${set.sequence.map((q) => sequenceCard(q, ans.sequence[q.id], flagged.has(q.id))).join("")}
     </section>`,
     `<section class="block">
       <div class="block-head"><h2>어순 배열</h2></div>
@@ -407,7 +418,7 @@ export function renderResult(set, ans, flags, view, wrules, mark) {
     </section>`,
     `<section class="block">
       <div class="block-head"><h2>단문 빈칸</h2></div>
-      ${clozeCard(set.cloze, ans.cloze, flagged.has(set.cloze.id), view)}
+      ${set.cloze.map((p, pi) => clozeCard(p, ans.cloze, flagged.has(p.id), view, clozeBase(set, pi))).join("")}
     </section>`,
   ];
   if (set.writing) {

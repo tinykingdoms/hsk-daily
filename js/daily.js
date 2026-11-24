@@ -74,19 +74,21 @@ export function buildDay(data, state, now = new Date(), n = 0) {
     ord = [...ord.filter(hit), ...ord.filter((id) => !hit(id))];
   }
 
+  // 단락과 빈칸은 세트마다 두 개씩 낸다. 시험에 나오는 유형을 더 많이 풀게 한다.
+  // 남은 것이 하나뿐이면 하나만 낸다. 수가 모자란다고 세트를 멈추지는 않는다.
   const set = {
     key,
     id: `${key}#${n + 1}`,
     nth: n + 1,
     weekend: isWeekend(now),
-    sequence: byId(data.sequence.sets, left.sequence[0]),
+    sequence: left.sequence.slice(0, 2).map((id) => byId(data.sequence.sets, id)),
     order: ord.slice(0, 3).map((id) => byId(data.order.items, id)),
-    cloze: byId(data.cloze.passages, left.cloze[0]),
+    cloze: left.cloze.slice(0, 2).map((id) => byId(data.cloze.passages, id)),
     writing: null,
     left: { sequence: left.sequence.length, order: ord.length, cloze: left.cloze.length },
   };
 
-  set.exhausted = !set.sequence || !set.cloze || set.order.length < 3;
+  set.exhausted = !set.sequence.length || !set.cloze.length || set.order.length < 3;
   if (set.exhausted) return set;
 
   // 쓰기는 날마다 첫 세트에 한 편. 하루에 두 편을 쓰게 하지는 않는다.
@@ -97,7 +99,8 @@ export function buildDay(data, state, now = new Date(), n = 0) {
     set.writing = byId(data.writing.items, left.writing[0]);
   }
 
-  set.total = 5 + set.order.length + set.cloze.blanks.length;
+  set.total =
+    5 * set.sequence.length + set.order.length + set.cloze.reduce((s, p) => s + p.blanks.length, 0);
   return set;
 }
 
