@@ -5,7 +5,7 @@ import {
 import { buildDay, seedSeen } from "./daily.js";
 import { renderDrill, buildView, emptyAnswers, isComplete, countCjk, esc } from "./drill.js";
 import { renderResult, gradeOrder, gradeSequence, gradeCloze } from "./explain.js";
-import { gradeWriting, setApiKey } from "./writing.js";
+import { gradeWriting, setApiKey, explainGrammar, orderAsk, clozeAsk } from "./writing.js";
 import {
   buildReading, buildReadingView, emptyReadingAnswers, readingComplete,
   gradeReadingQuestion, renderReading, renderReadingResult, readingExhausted,
@@ -20,6 +20,10 @@ let route = "drill";
 let forceWeekday = false;
 // 모델 채점은 한 번 받으면 기록에 남는다. 같은 글을 두 번 보내지 않는다.
 let mark = { id: null, state: "idle" };
+// 어법 설명도 받으면 기록에 남는다. 지금 받고 있는 문항만 여기 둔다.
+let note = { id: null, state: "idle", error: "" };
+// 다시 쓰기에 쓴 글. 화면을 다시 그려도 칸이 비지 않게 여기 들고 있는다.
+let drill = { text: {}, shown: false };
 
 // 제목줄도 문제를 푸는 동안 눈에 들어온다. 그래서 여기도 중국어로 둔다.
 const WEEK = ["日", "一", "二", "三", "四", "五", "六"];
@@ -69,6 +73,7 @@ function busy() {
   if (!ans) return false;
   return (
     ans.writing.text.trim() !== "" ||
+    Object.values(drill.text).some((t) => t.trim() !== "") ||
     Object.values(ans.sequence).some((l) => l.some((x) => x !== null)) ||
     Object.values(ans.order).some((l) => l.length) ||
     Object.values(ans.cloze).some((x) => x !== null)
@@ -121,6 +126,8 @@ function startDay() {
   }
   route = "drill";
   mark = { id: null, state: "idle" };
+  note = { id: null, state: "idle", error: "" };
+  drill = { text: {}, shown: false };
   render();
 }
 
@@ -148,8 +155,44 @@ async function askGrade() {
     state.graded[item.id] = { text: ans.writing.text || "", grade, at: Date.now() };
     save(state);
     mark = { id: item.id, state: "done", grade };
+    // 새 문장이 왔으니 앞 채점에 쓴 답은 지운다
+    drill = { text: {}, shown: false };
   } catch (e) {
     mark = { id: item.id, state: "error", error: e.message };
+  }
+  render();
+}
+
+/** 화면에 내려 줄 어법 설명. 받아 둔 것과 지금 받고 있는 것을 같이 넘긴다. */
+function noteView() {
+  return { id: note.id, state: note.state, error: note.error, kept: state.notes || {} };
+}
+
+/** 어법 설명을 받는다. 문항 종류에 따라 보낼 말이 다르다. */
+function noteAsk(id) {
+  if (id.includes(":")) {
+    const [pid, no] = id.split(":");
+    const p = set.cloze.find((x) => x.id === pid);
+    const b = p && p.blanks.find((x) => String(x.no) === no);
+    return p && b ? clozeAsk(p, b, ans.cloze[id]) : null;
+  }
+  const it = set.order.find((x) => x.id === id);
+  return it ? orderAsk(it, ans.order[id]) : null;
+}
+
+async function askNote(id) {
+  const ask = noteAsk(id);
+  if (!ask) return;
+  note = { id, state: "busy", error: "" };
+  render();
+  try {
+    const got = await explainGrammar(ask);
+    state.notes = state.notes || {};
+    state.notes[id] = got;
+    save(state);
+    note = { id: null, state: "idle", error: "" };
+  } catch (e) {
+    note = { id, state: "error", error: e.message };
   }
   render();
 }
@@ -211,7 +254,7 @@ function render() {
   } else if (set.exhausted) {
     main.innerHTML = exhaustedView();
   } else if (route === "result") {
-    main.innerHTML = renderResult(set, ans, state.flags, view, data.wrules, writingMark());
+    main.innerHTML = renderResult(set, ans, state.flags, view, data.wrules, writingMark(), noteView(), drill);
   } else if (set.weekend && !forceWeekday) {
     main.innerHTML = `<section class="block">
       <div class="block-head"><h2>주말</h2></div>
@@ -423,6 +466,11 @@ main.addEventListener("click", (e) => {
   } else if (act === "grade-writing") {
     askGrade();
     return;
+  } else if (act === "explain") {
+    askNote(btn.dataset.id);
+    return;
+  } else if (act === "drill-show") {
+    drill.shown = true;
   } else if (act === "record") {
     route = "record";
   } else if (act === "reopen") {
@@ -469,6 +517,13 @@ main.addEventListener("click", (e) => {
     }
   }
   render();
+});
+
+// 다시 쓰기 칸은 글자마다 다시 그리지 않는다. 적어만 두고 다음 그림에 끼워 넣는다.
+main.addEventListener("input", (e) => {
+  const box = e.target.closest("[data-drill]");
+  if (!box) return;
+  drill.text[box.dataset.drill] = box.value;
 });
 
 function copy(text, btn) {

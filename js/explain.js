@@ -39,13 +39,55 @@ function tokens(item, list, flags) {
     .join("");
 }
 
-function flagBtn(id, flagged) {
+function flagOne(id, flagged) {
   return `<button type="button" class="ghost-btn flag-btn" data-act="flag" data-id="${id}">${
     flagged ? "신고함" : "이 문항 이상함"
   }</button>`;
 }
 
-function orderCard(item, mine, flagged) {
+function flagBtn(id, flagged) {
+  return `<div class="ex-btns">${flagOne(id, flagged)}</div>`;
+}
+
+/**
+ * 틀린 문항에 어법 설명을 붙이는 자리.
+ *
+ * 받아 둔 설명이 있으면 그걸 그린다. 없으면 단추만 둔다. 열쇠가 없으면 단추도
+ * 두지 않는다. 작문 자리에서 열쇠를 넣게 되어 있고, 여기에 또 칸을 두면 같은
+ * 것을 두 군데서 묻는 화면이 된다.
+ *
+ * flagged 가 null 이면 신고 단추를 빼고 어법 단추만 둔다. 빈칸은 지문 하나에
+ * 문항이 여럿이라 신고는 지문에 한 번만 받는다.
+ */
+function noteArea(id, notes, flagged, wrong) {
+  const kept = (notes.kept || {})[id];
+  const live = notes.id === id ? notes.state : "idle";
+  let body = "";
+  let btn = "";
+  if (wrong && kept) {
+    body = `<div class="n-box">
+      <p class="keep-head">어법</p>
+      ${kept.lines.map((l) => `<p class="n-line">${esc(l)}</p>`).join("")}
+      <ul class="n-ex">${kept.examples
+        .map(
+          (e) =>
+            `<li><span class="zh" lang="zh-CN">${esc(e.zh)}</span><span class="k-ko">${esc(e.ko)}</span></li>`
+        )
+        .join("")}</ul>
+    </div>`;
+  } else if (wrong && live === "busy") {
+    body = `<p class="n-wait">어법 설명을 받고 있습니다.</p>`;
+  } else if (wrong && live === "error") {
+    body = `<p class="g-error">${esc(notes.error)}</p>`;
+    btn = `<button type="button" class="ghost-btn" data-act="explain" data-id="${esc(id)}">다시 받기</button>`;
+  } else if (wrong && apiKey()) {
+    btn = `<button type="button" class="ghost-btn" data-act="explain" data-id="${esc(id)}">어법 설명</button>`;
+  }
+  const flag = flagged === null ? "" : flagOne(id, flagged);
+  return `${body}${btn || flag ? `<div class="ex-btns">${btn}${flag}</div>` : ""}`;
+}
+
+function orderCard(item, mine, flagged, notes) {
   const { ok, which, target } = gradeOrder(item, mine);
   const mism = target.map((v, i) => mine[i] !== v);
   const first = mism.indexOf(true);
@@ -109,7 +151,7 @@ function orderCard(item, mine, flagged) {
     ${diff}
     <ul class="rules">${item.rules.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>
     ${keep}
-    ${flagBtn(item.id, flagged)}
+    ${noteArea(item.id, notes, flagged, !ok)}
   </div>`;
 }
 
@@ -159,7 +201,7 @@ export function gradeCloze(blank, pick) {
   return blank.options[pick] && blank.options[pick].ok === true;
 }
 
-function clozeCard(passage, mine, flagged, view, base) {
+function clozeCard(passage, mine, flagged, view, base, notes) {
   const blanks = passage.blanks
     .map((b) => {
       const at = `${passage.id}:${b.no}`;
@@ -184,6 +226,7 @@ function clozeCard(passage, mine, flagged, view, base) {
           }</span>
         </div>
         <ul class="opt-review">${opts}</ul>
+        ${noteArea(at, notes, null, !ok)}
       </div>`;
     })
     .join("");
@@ -271,7 +314,53 @@ function findList(findings) {
  * 기계 점검이 못 보는 것만 여기서 본다. 주제에 맞게 썼는지, 중국어로 그렇게
  * 말하는지다. 열쇠가 없으면 열쇠를 받는 칸이 먼저 나온다.
  */
-function gradeBlock(mark) {
+const bare = (s) => String(s).replace(/[\s。，、！？；：]/g, "");
+
+/**
+ * 다시 쓰기.
+ *
+ * 틀린 문형 하나를 단어만 바꿔서 세 번 쓴다. 한국어 뜻과 쓸 단어를 주고 중국어
+ * 한 문장을 쓰게 한다. 단추를 누르면 모범 문장이 내가 쓴 것 밑에 붙는다.
+ *
+ * 맞았는지는 적지 않는다. 같은 뜻을 다른 말로 쓴 것도 맞는 중국어라서, 글자가
+ * 다르다고 틀렸다고 하면 맞는 답을 틀렸다고 가르치는 일이 된다. 글자까지 같을
+ * 때만 같다고 적는다.
+ */
+function drillBlock(d, drill) {
+  if (!d || !d.items || !d.items.length) return "";
+  const rows = d.items
+    .map((it, i) => {
+      const mine = drill.text[i] || "";
+      const same = drill.shown && mine && bare(mine) === bare(it.answer);
+      return `<li>
+        <p class="d-ko">${esc(it.ko)}</p>
+        <p class="d-words zh" lang="zh-CN">${esc(it.words)}</p>
+        <input type="text" class="zh" lang="zh-CN" data-drill="${i}" autocomplete="off" spellcheck="false"
+          value="${esc(mine)}" placeholder="여기에 중국어로 쓰기">
+        ${
+          drill.shown
+            ? `<p class="d-ans"><span class="d-tag">모범</span><span class="zh" lang="zh-CN">${esc(
+                it.answer
+              )}</span>${same ? `<span class="d-same">같음</span>` : ""}</p>`
+            : ""
+        }
+      </li>`;
+    })
+    .join("");
+  return `<div class="drill">
+    <p class="keep-head">다시 쓰기</p>
+    ${d.pattern ? `<p class="d-pat">${esc(d.pattern)}</p>` : ""}
+    ${d.why ? `<p class="d-why">${esc(d.why)}</p>` : ""}
+    <ul>${rows}</ul>
+    ${
+      drill.shown
+        ? ""
+        : `<div class="ex-btns"><button type="button" class="ghost-btn" data-act="drill-show">모범 문장 보기</button></div>`
+    }
+  </div>`;
+}
+
+function gradeBlock(mark, drill) {
   const head = `<p class="lead" style="margin:18px 0 6px">채점</p>`;
   if (!apiKey()) {
     return `${head}<div class="keyform">
@@ -292,6 +381,11 @@ function gradeBlock(mark) {
     return `${head}<button type="button" data-act="grade-writing">채점 받기</button>`;
   }
   const g = mark.grade;
+  // 먼저 받아 둔 채점에는 고쳐 쓴 글과 다시 쓰기가 없다. 그 자리만 비워 둔다
+  const rewrite = g.rewrite
+    ? `<p class="lead" style="margin:16px 0 6px">고친 글</p>
+       <p class="answer-zh zh" lang="zh-CN" style="font-size:16px">${esc(g.rewrite).replace(/\n/g, "<br>")}</p>`
+    : "";
   const fixes = g.fixes.length
     ? `<div class="find-group f-fix"><ul class="finds">${g.fixes
         .map(
@@ -311,12 +405,14 @@ function gradeBlock(mark) {
     : "";
   return `${head}
     <p class="g-verdict">${esc(g.verdict)}</p>
+    ${rewrite}
     ${fixes}
     ${g.content.length ? `<ul class="rules">${g.content.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : ""}
-    ${used}`;
+    ${used}
+    ${drillBlock(g.drill, drill)}`;
 }
 
-function writingCard(item, ans, flagged, wrules, mark) {
+function writingCard(item, ans, flagged, wrules, mark, drill) {
   const text = ans.text || "";
   const r = checkWriting(text, item, wrules);
   const nFix = r.findings.filter((f) => f.level === "fix").length;
@@ -331,9 +427,12 @@ function writingCard(item, ans, flagged, wrules, mark) {
     </div>`;
   }
 
+  // 규칙으로 고친 글은 모델이 고쳐 쓴 글이 오기 전까지만 둔다. 같은 글을 세 번
+  // 그리면 어느 것을 읽어야 하는지 알 수 없다.
+  const fromModel = mark.state === "done" && mark.grade && mark.grade.rewrite;
   const fixed = applyFixes(text, wrules);
   const corrected =
-    fixed !== text
+    !fromModel && fixed !== text
       ? `<p class="lead" style="margin:16px 0 6px">고친 글</p>
          <p class="answer-zh zh" lang="zh-CN" style="font-size:16px">${esc(fixed).replace(/\n/g, "<br>")}</p>`
       : "";
@@ -352,7 +451,7 @@ function writingCard(item, ans, flagged, wrules, mark) {
     <p class="lead" style="margin:16px 0 6px">내가 쓴 글</p>
     <p class="answer-zh zh" lang="zh-CN" style="font-size:16px">${marked(text, r.findings)}</p>
     ${corrected}
-    ${gradeBlock(mark)}
+    ${gradeBlock(mark, drill)}
     ${modelBlock(item)}
     ${flagBtn(item.id, flagged)}
   </div>`;
@@ -386,7 +485,7 @@ function modelBlock(item) {
     <ul class="rules" style="margin-top:16px">${item.checklist.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>`;
 }
 
-export function renderResult(set, ans, flags, view, wrules, mark) {
+export function renderResult(set, ans, flags, view, wrules, mark, notes, drill) {
   const flagged = new Set(flags.map((f) => f.id));
   const seqTotal = 5 * set.sequence.length;
   const clzTotal = set.cloze.reduce((s, p) => s + p.blanks.length, 0);
@@ -414,17 +513,19 @@ export function renderResult(set, ans, flags, view, wrules, mark) {
     </section>`,
     `<section class="block">
       <div class="block-head"><h2>어순 배열</h2></div>
-      ${set.order.map((it) => orderCard(it, ans.order[it.id], flagged.has(it.id))).join("")}
+      ${set.order.map((it) => orderCard(it, ans.order[it.id], flagged.has(it.id), notes)).join("")}
     </section>`,
     `<section class="block">
       <div class="block-head"><h2>단문 빈칸</h2></div>
-      ${set.cloze.map((p, pi) => clozeCard(p, ans.cloze, flagged.has(p.id), view, clozeBase(set, pi))).join("")}
+      ${set.cloze
+        .map((p, pi) => clozeCard(p, ans.cloze, flagged.has(p.id), view, clozeBase(set, pi), notes))
+        .join("")}
     </section>`,
   ];
   if (set.writing) {
     out.push(`<section class="block">
       <div class="block-head"><h2>쓰기</h2></div>
-      ${writingCard(set.writing, ans.writing, flagged.has(set.writing.id), wrules, mark || { state: "idle" })}
+      ${writingCard(set.writing, ans.writing, flagged.has(set.writing.id), wrules, mark || { state: "idle" }, drill)}
     </section>`);
   }
   out.push(`<div class="row-btns">

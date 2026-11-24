@@ -1,7 +1,17 @@
 // 기록은 이 기기에만 쌓인다. PC와 폰이 따로 쌓이는 건 의도된 것이다.
 const KEY = "hsk-daily-v1";
 
-const blank = () => ({ days: {}, sets: {}, seen: {}, stats: {}, flags: [], reading: {}, graded: {} });
+const blank = () => ({
+  days: {},
+  sets: {},
+  seen: {},
+  stats: {},
+  flags: [],
+  reading: {},
+  graded: {},
+  // 받아 둔 어법 설명. 같은 문항에 두 번 돈을 쓰지 않는다
+  notes: {},
+});
 
 export function load() {
   try {

@@ -228,8 +228,10 @@ const SCHEMA = {
   type: "object",
   properties: {
     verdict: { type: "string" },
+    rewrite: { type: "string" },
     fixes: {
       type: "array",
+      maxItems: 3,
       items: {
         type: "object",
         properties: {
@@ -241,25 +243,71 @@ const SCHEMA = {
         additionalProperties: false,
       },
     },
-    content: { type: "array", items: { type: "string" } },
+    content: { type: "array", maxItems: 2, items: { type: "string" } },
+    drill: {
+      type: "object",
+      properties: {
+        pattern: { type: "string" },
+        why: { type: "string" },
+        items: {
+          type: "array",
+          minItems: 3,
+          maxItems: 3,
+          items: {
+            type: "object",
+            properties: {
+              ko: { type: "string" },
+              words: { type: "string" },
+              answer: { type: "string" },
+            },
+            required: ["ko", "words", "answer"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["pattern", "why", "items"],
+      additionalProperties: false,
+    },
     used: { type: "array", items: { type: "string" } },
   },
-  required: ["verdict", "fixes", "content", "used"],
+  required: ["verdict", "rewrite", "fixes", "content", "drill", "used"],
   additionalProperties: false,
 };
 
 const SYSTEM = `HSK 5급 쓰기 답안을 채점한다. 쓴 사람은 한국어를 쓰는 학습자다.
 
+틀린 곳을 전부 따로 나열하면 읽을 줄만 늘고 다음 글에 남는 것이 없다.
+고쳐 쓴 글 한 편, 중요한 세 개, 연습 문장 세 개로 끝낸다.
+
+rewrite 에 적을 것
+- 답안 전체를 고쳐 쓴 글. 틀린 곳만 고치고 나머지는 쓴 사람의 글을 그대로 둔다.
+- 더 멋있게 고치지 않는다. 내용과 구성은 쓴 사람이 쓴 대로 둔다.
+- 글자 수가 모자라면 모자란 만큼만 이어 쓴다.
+- 단락은 쓴 사람이 나눈 자리에서 줄바꿈 하나로 나눈다.
+
 fixes 에 적을 것
+- rewrite 에서 고친 것 가운데 중요한 것 세 개까지만. 나머지는 적지 않는다.
+- 중요한 것은 시험에서 점수가 깎이는 것, 또 틀릴 것, 다른 문장에서도 쓰는 것이다.
 - 확실히 틀린 중국어, 또는 중국어로 그렇게 말하지 않는 표현만 적는다.
 - 취향 차이와 더 멋있는 표현은 적지 않는다. 틀리지 않은 것을 고치라고 하면 틀린 쪽을 외운다.
 - bad 는 답안에 있는 글자를 그대로 잘라 온다. 다듬어서 옮기지 않는다.
 - good 은 고친 중국어다. 빼야 하는 말이면 빈 문자열로 둔다.
 - why 는 한국어 한 줄이다. 왜 틀렸는지만 적는다.
+- 고칠 것이 없으면 빈 배열로 둔다.
 
 content 에 적을 것
-- 내용과 구성에 대한 한국어 한 줄 항목 두 개에서 네 개.
-- 문제가 요구한 것을 다 썼는지, 빠진 것이 무엇인지, 어디를 늘리면 되는지.
+- 내용과 구성에 대한 한국어 한 줄 항목 두 개까지.
+- 문제가 요구한 것을 다 썼는지, 빠진 것이 무엇인지.
+
+drill 에 적을 것
+- 답안에서 틀린 문형 하나를 고른다. 틀린 것이 없으면 답안이 쓴 5급 문형 하나를 고른다.
+- pattern 은 그 문형의 틀이다. 把 + 목적어 + 동사 + 得 + 보어 처럼 적는다.
+- why 는 이 문형을 다시 써 보는 이유, 한국어 한 줄.
+- items 세 개는 그 문형에 단어만 바꾼 문장이다. 답안에 있는 문장은 쓰지 않는다.
+- ko 는 그 문장의 한국어다. 이걸 읽고 중국어로 쓴다.
+- words 는 쓸 중국어 단어를 / 로 나눠 적는다. 차례는 섞어서 적는다.
+- answer 는 그 문장의 중국어다. 한 문장이고 마침표까지 적는다.
+- 5급 누적 어휘 3,600어 안에서만 쓴다.
 
 used 에 적을 것
 - 답안이 실제로 맞게 쓴 5급 어법이나 표현을 중국어로 적는다. 없으면 빈 배열로 둔다.
@@ -273,26 +321,14 @@ verdict
 - 칭찬과 격려는 적지 않는다. 사실만 적는다.`;
 
 /**
- * 쓴 글을 모델에게 보내고 채점 결과를 받는다.
+ * 모델에게 묻고 정해 둔 모양으로 받는다.
  *
  * 실패하면 API 가 보낸 말을 그대로 던진다. 열쇠가 틀렸는지, 작업공간을 적어야
  * 하는지, 이 조직이 브라우저 요청을 막아 두었는지는 그 말에 적혀 있다.
  */
-export async function gradeWriting(item, text) {
+async function askModel(system, ask, schema, effort) {
   const key = apiKey();
   if (!key) throw new Error("API 열쇠가 없습니다");
-
-  const ask = [
-    `문제: ${item.prompt}`,
-    `${item.minChars}자 이상`,
-    item.panels ? `네 장면: ${item.panels.map((p, i) => `${i + 1} ${p.scene}`).join(" / ")}` : "",
-    `볼 것: ${item.checklist.join(" / ")}`,
-    "",
-    "답안",
-    text,
-  ]
-    .filter(Boolean)
-    .join("\n");
 
   const stop = new AbortController();
   const timer = setTimeout(() => stop.abort(), 120000);
@@ -311,10 +347,10 @@ export async function gradeWriting(item, text) {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 16000,
-        system: SYSTEM,
+        system,
         messages: [{ role: "user", content: ask }],
         thinking: { type: "adaptive" },
-        output_config: { effort: "medium", format: { type: "json_schema", schema: SCHEMA } },
+        output_config: { effort, format: { type: "json_schema", schema } },
         fallbacks: "default",
       }),
     });
@@ -328,23 +364,145 @@ export async function gradeWriting(item, text) {
   if (!res.ok) {
     throw new Error((body && body.error && body.error.message) || `${res.status} 응답`);
   }
-  if (body.stop_reason === "refusal") throw new Error("모델이 이 글을 채점하지 않았습니다");
+  if (body.stop_reason === "refusal") throw new Error("모델이 답하지 않았습니다");
 
   const block = (body.content || []).find((b) => b.type === "text");
-  if (!block) throw new Error("채점 결과가 비어서 왔습니다");
-  let out;
+  if (!block) throw new Error("답이 비어서 왔습니다");
   try {
-    out = JSON.parse(block.text);
+    return JSON.parse(block.text);
   } catch {
-    throw new Error("채점 결과를 읽지 못했습니다");
+    throw new Error("답을 읽지 못했습니다");
   }
+}
+
+/** 쓴 글을 보내고 고쳐 쓴 글, 고칠 곳 세 개, 다시 쓸 문장 세 개를 받는다. */
+export async function gradeWriting(item, text) {
+  const ask = [
+    `문제: ${item.prompt}`,
+    `${item.minChars}자 이상`,
+    item.panels ? `네 장면: ${item.panels.map((p, i) => `${i + 1} ${p.scene}`).join(" / ")}` : "",
+    `볼 것: ${item.checklist.join(" / ")}`,
+    "",
+    "답안",
+    text,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const out = await askModel(SYSTEM, ask, SCHEMA, "medium");
+  const d = out.drill || {};
   return {
     verdict: out.verdict || "",
+    rewrite: (out.rewrite || "").trim(),
     // 고친 모양이 원문과 같으면 고칠 곳이 아니다. 화살표만 그려지고 읽을 것이 없다.
-    fixes: (out.fixes || []).filter((f) => f.bad && f.good !== f.bad),
-    content: (out.content || []).filter(Boolean),
+    fixes: (out.fixes || []).filter((f) => f.bad && f.good !== f.bad).slice(0, 3),
+    content: (out.content || []).filter(Boolean).slice(0, 2),
+    drill: {
+      pattern: d.pattern || "",
+      why: d.why || "",
+      items: (d.items || []).filter((x) => x && x.ko && x.answer).slice(0, 3),
+    },
     used: (out.used || []).filter(Boolean),
   };
+}
+
+/* --------------------------------------------------------------- 어법 설명
+ *
+ * 어순과 빈칸을 틀렸을 때 내가 놓은 차례가 왜 안 되는지는 화면에 적혀 있지 않다.
+ * 어순 카드에는 손으로 쓴 어법 규칙이 있고 빈칸 카드에는 보기 해석만 있다.
+ * 그 자리에 한국어 두 줄과 같은 어법 예문 두 개를 받아서 붙인다.
+ *
+ * 비슷한 문제를 새로 만들어 풀게 하지는 않는다. 보기 넷 중에 맞는 것이 둘 있는
+ * 문항이 나오고, 맞는 답을 틀렸다고 채점하면 그 자리에서 공부가 막힌다.
+ * 여기서 받는 것은 읽는 글뿐이라 채점할 것이 없다.
+ */
+
+const NOTE_SCHEMA = {
+  type: "object",
+  properties: {
+    lines: { type: "array", minItems: 2, maxItems: 2, items: { type: "string" } },
+    examples: {
+      type: "array",
+      minItems: 2,
+      maxItems: 2,
+      items: {
+        type: "object",
+        properties: { zh: { type: "string" }, ko: { type: "string" } },
+        required: ["zh", "ko"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["lines", "examples"],
+  additionalProperties: false,
+};
+
+const NOTE_SYSTEM = `HSK 5급 문항을 틀린 사람에게 어법을 설명한다. 읽는 사람은 한국어를 쓰는 학습자다.
+
+lines 에 적을 것
+- 한국어 두 줄. 한 줄에 한 가지만, 한 줄은 쉰 자 안으로 적는다.
+- 첫 줄은 이 자리를 정하는 규칙, 둘째 줄은 내가 고른 것이 왜 안 되는지.
+- 이 문항에만 맞는 말이 아니라 다음 문장에도 쓸 수 있는 규칙으로 적는다.
+- 화면에 이미 적혀 있다고 알려 준 말은 되풀이하지 않는다.
+
+examples 에 적을 것
+- 같은 어법의 예문 두 개. 문항에 나온 문장은 쓰지 않는다.
+- zh 는 중국어 한 문장, ko 는 그 한국어다.
+- 5급 누적 어휘 3,600어 안에서만 쓴다.
+
+말투
+- 사람이 옆에서 말하듯 짧게 쓴다.
+- 줄표는 쓰지 않는다.
+- 칭찬과 격려는 적지 않는다. 사실만 적는다.`;
+
+/** 어법 설명을 받는다. 채점하는 것이 없어서 틀릴 자리가 없다. */
+export async function explainGrammar(ask) {
+  const out = await askModel(NOTE_SYSTEM, ask, NOTE_SCHEMA, "low");
+  return {
+    lines: (out.lines || []).filter(Boolean).slice(0, 2),
+    examples: (out.examples || []).filter((e) => e && e.zh && e.ko).slice(0, 2),
+  };
+}
+
+/** 어순 문항 하나를 설명해 달라고 보낼 말. */
+export function orderAsk(item, mine) {
+  return [
+    "어순 배열 문항이다. 토막을 차례대로 놓아 한 문장을 만든다.",
+    `정답: ${item.sentence}`,
+    `뜻: ${item.ko}`,
+    `어법: ${item.grammar.join(" / ")}`,
+    `내가 놓은 차례: ${mine.map((ci) => item.chunks[ci]).join(" / ")}`,
+    "",
+    "화면에 이미 적혀 있는 말",
+    ...item.rules.map((r) => `- ${r}`),
+    "",
+    "내가 놓은 차례가 왜 안 되는지 설명한다.",
+  ].join("\n");
+}
+
+/** 빈칸 하나를 설명해 달라고 보낼 말. */
+export function clozeAsk(passage, blank, pick) {
+  // 다른 빈칸은 정답을 끼워서 보낸다. 괄호만 남아 있으면 글이 무슨 말인지 모른다.
+  const filled = passage.text.replace(/\{\{(\d+)\}\}/g, (m, d) => {
+    if (Number(d) === blank.no) return "＿＿＿";
+    const b = passage.blanks.find((x) => x.no === Number(d));
+    const o = b && b.options.find((x) => x.ok);
+    return o ? o.t : m;
+  });
+  const right = blank.options.find((o) => o.ok);
+  const got = blank.options[pick];
+  return [
+    "단문 빈칸 문항이다. ＿＿＿ 자리에 들어갈 것을 보기에서 고른다.",
+    `본문: ${filled}`,
+    `보기: ${blank.options.map((o) => o.t).join(" / ")}`,
+    `정답: ${right ? right.t : ""}`,
+    `내가 고른 것: ${got && !got.ok ? got.t : "없음"}`,
+    "",
+    "화면에 이미 적혀 있는 말",
+    ...blank.options.map((o) => `- ${o.t} 는 ${o.note}`),
+    "",
+    "정답이 왜 맞고 내가 고른 것이 왜 안 되는지 설명한다.",
+  ].join("\n");
 }
 
 /** fix 가 있는 규칙을 전부 적용한 글. 눈으로 견주기 위한 것이다. */

@@ -590,3 +590,44 @@ label { display: block; font-size: 13px; color: var(--ink-2); margin-bottom: 4px
 .g-used { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 14px 0 0; }
 .g-tag { flex: 0 0 auto; font-size: 11px; letter-spacing: 0.06em; color: var(--ink-3); }
 .g-used .zh { font-size: 15px; color: var(--ok); }
+
+/* ------------------------------------------------- 어법 설명과 다시 쓰기 */
+/* 어법은 읽는 글이다. 채점하는 것이 없어서 맞음 틀림 표시도 없다. */
+.ex-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.ex-btns .flag-btn { margin-top: 0; }
+
+.n-box { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.n-line { margin: 0 0 4px; font-size: 13px; line-height: 1.7; color: var(--ink-2); }
+.n-ex { margin: 10px 0 0; padding: 0; list-style: none; }
+.n-ex li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-top: 10px; }
+.n-ex li:first-child { margin-top: 0; }
+.n-ex .zh { font-size: 15px; }
+.n-wait { margin: 12px 0 0; font-size: 13px; color: var(--ink-3); }
+
+.drill { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.d-pat { margin: 0 0 4px; font-size: 15px; font-weight: 650; }
+.d-why { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink-3); }
+.drill ul { margin: 14px 0 0; padding: 0; list-style: none; }
+.drill li { margin-top: 16px; }
+.drill li:first-child { margin-top: 0; }
+.d-ko { margin: 0; font-size: 14px; color: var(--ink-2); }
+.d-words { margin: 3px 0 0; font-size: 14px; color: var(--ink-3); }
+
+.drill input {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+}
+
+/* 모범 문장을 초록으로 두면 내가 쓴 것이 틀렸다는 뜻으로 읽힌다. 다른 말로 썼어도
+   맞는 중국어일 수 있어서, 글자까지 같을 때만 같다고 적는다. */
+.d-ans { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 6px 0 0; }
+.d-ans .zh { font-size: 16px; }
+.d-tag { flex: 0 0 auto; font-size: 11px; letter-spacing: 0.06em; color: var(--ink-3); }
+.d-same { font-size: 11px; letter-spacing: 0.06em; color: var(--ok); }
