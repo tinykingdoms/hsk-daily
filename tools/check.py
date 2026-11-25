@@ -273,8 +273,13 @@ def check_sequence(doc):
                 fail(lw, "cue 가 비었다. 단서를 못 쓰겠으면 순서가 유일하지 않은 문항이다")
             if ln.get("mark") and ln["mark"] not in segs.get(ln["to"], ""):
                 fail(lw, f"mark '{ln['mark']}' 가 토막글 {ln['to']} 안에 없다")
-        if not st.get("ko", "").strip():
-            fail(w, "ko (전체 번역) 가 비었다")
+        ko = st.get("ko") or {}
+        for k in segs:
+            if not ko.get(k, "").strip():
+                fail(f"{w}/{k}", "ko (그 토막의 해석) 가 비었다")
+        for k in ko:
+            if k not in segs:
+                fail(w, f"ko 에 토막글에 없는 {k} 가 있다")
 
 
 # ------------------------------------------------------------- 단문 빈칸

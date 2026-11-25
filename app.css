@@ -470,24 +470,21 @@ mark.m-look { padding: 0 1px; border-radius: 3px; background: var(--accent-soft)
 .k-ko { font-size: 13px; color: var(--ink-2); }
 .k-use { margin: 2px 0 0; font-size: 13px; line-height: 1.7; color: var(--ink-3); }
 
-.chain { margin: 12px 0 0; display: grid; gap: 8px; }
+/* 단락 배열 해설. 문제 화면의 토막글과 같은 모양으로 두고 해석만 밑에 붙인다 */
+.seq-read { display: grid; gap: 7px; margin: 12px 0 0; padding: 0; list-style: none; }
 
-.chain-step {
+.seq-read li {
   display: grid;
-  grid-template-columns: 70px 1fr;
-  gap: 10px;
-  padding: 9px 11px;
+  grid-template-columns: 18px 1fr;
+  gap: 9px;
+  padding: 10px 11px;
   border-radius: 8px;
-  border-left: 3px solid var(--ok);
   background: var(--bg);
-  font-size: 13px;
 }
 
-.chain-step.broken { border-left-color: var(--no); }
-.chain-step.broken b { color: var(--no); }
-.chain-step b { font-weight: 700; font-variant-numeric: tabular-nums; }
-.chain-step .brk { display: block; margin-top: 2px; font-size: 11px; font-weight: 650; color: var(--no); }
-.mark { display: block; margin-top: 3px; color: var(--ink-3); font-size: 13px; }
+.seq-read .s-key { font-weight: 700; color: var(--accent); }
+.seq-read .zh { margin: 0; font-size: 15px; line-height: 1.75; }
+.seq-read .s-ko { margin: 5px 0 0; font-size: 13px; line-height: 1.7; color: var(--ink-2); }
 
 .lead { margin: 0 0 10px; font-size: 14px; color: var(--ink-2); }
 

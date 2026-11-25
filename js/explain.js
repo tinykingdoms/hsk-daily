@@ -159,21 +159,27 @@ export function gradeSequence(set, mine) {
   return set.answer.map((k, i) => mine[i] === k);
 }
 
+/**
+ * 단락 배열 해설.
+ *
+ * 정답 순서대로 토막글을 늘어놓고 토막마다 해석을 붙인다. 순서를 정하는 근거는
+ * 적지 않는다. 글자가 안 읽히는 상태에서는 근거를 읽어도 알 수 없고, 정답 순서로
+ * 읽어 보면 어디가 이어지는지는 글에서 바로 보인다.
+ */
 function sequenceCard(set, mine, flagged) {
   const hits = gradeSequence(set, mine);
   const okCount = hits.filter(Boolean).length;
-  const minePairs = new Set(mine.slice(0, -1).map((k, i) => `${k}>${mine[i + 1]}`));
 
-  const chain = set.links
-    .map((ln, i) => {
-      const broken = !minePairs.has(`${ln.from}>${ln.to}`);
-      return `<div class="chain-step${broken ? " broken" : ""}">
-        <b>${ln.from} &rarr; ${ln.to}${broken ? '<span class="brk">여기서 끊김</span>' : ""}</b>
-        <div>${esc(ln.cue)}${
-        ln.mark ? `<span class="mark zh" lang="zh-CN">${esc(ln.mark)}</span>` : ""
-      }</div>
-      </div>`;
-    })
+  const read = set.answer
+    .map(
+      (k) => `<li>
+        <span class="s-key">${k}</span>
+        <div>
+          <p class="zh" lang="zh-CN">${esc(set.segments[k])}</p>
+          <p class="s-ko">${esc((set.ko || {})[k] || "")}</p>
+        </div>
+      </li>`
+    )
     .join("");
 
   const row = (label, list, cls) =>
@@ -190,9 +196,7 @@ function sequenceCard(set, mine, flagged) {
       ${row("내 답", mine, "bad")}
       ${row("정답", set.answer, "good")}
     </div>
-    <p class="lead" style="margin:14px 0 0">${esc(set.first)}</p>
-    <div class="chain">${chain}</div>
-    <p class="ko-line" style="margin-top:14px">${esc(set.ko)}</p>
+    <ul class="seq-read">${read}</ul>
     ${flagBtn(set.id, flagged)}
   </div>`;
 }
