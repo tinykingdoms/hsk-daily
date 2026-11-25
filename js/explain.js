@@ -335,20 +335,27 @@ const bare = (s) => String(s).replace(/[\s。，、！？；：]/g, "");
  * 맞았는지는 적지 않는다. 같은 뜻을 다른 말로 쓴 것도 맞는 중국어라서, 글자가
  * 다르다고 틀렸다고 하면 맞는 답을 틀렸다고 가르치는 일이 된다. 글자까지 같을
  * 때만 같다고 적는다.
+ *
+ * drill 이 없으면 쓰는 칸을 두지 않고 모범 문장만 그린다. 기록 화면에서 지난
+ * 채점을 다시 읽을 때다. 거기 쓴 글은 어디에도 남지 않으니 칸을 두면 안 된다.
  */
 function drillBlock(d, drill) {
   if (!d || !d.items || !d.items.length) return "";
   const rows = d.items
     .map((it, i) => {
-      const mine = drill.text[i] || "";
-      const same = drill.shown && mine && bare(mine) === bare(it.answer);
+      const mine = (drill && drill.text[i]) || "";
+      const same = drill && drill.shown && mine && bare(mine) === bare(it.answer);
       return `<li>
         <p class="d-ko">${esc(it.ko)}</p>
         <p class="d-words zh" lang="zh-CN">${esc(it.words)}</p>
-        <input type="text" class="zh" lang="zh-CN" data-drill="${i}" autocomplete="off" spellcheck="false"
-          value="${esc(mine)}" placeholder="여기에 중국어로 쓰기">
         ${
-          drill.shown
+          drill
+            ? `<input type="text" class="zh" lang="zh-CN" data-drill="${i}" autocomplete="off" spellcheck="false"
+          value="${esc(mine)}" placeholder="여기에 중국어로 쓰기">`
+            : ""
+        }
+        ${
+          !drill || drill.shown
             ? `<p class="d-ans"><span class="d-tag">모범</span><span class="zh" lang="zh-CN">${esc(
                 it.answer
               )}</span>${same ? `<span class="d-same">같음</span>` : ""}</p>`
@@ -363,15 +370,19 @@ function drillBlock(d, drill) {
     ${d.why ? `<p class="d-why">${esc(d.why)}</p>` : ""}
     <ul>${rows}</ul>
     ${
-      drill.shown
+      !drill || drill.shown
         ? ""
         : `<div class="ex-btns"><button type="button" class="ghost-btn" data-act="drill-show">모범 문장 보기</button></div>`
     }
   </div>`;
 }
 
+const GRADE_HEAD = `<p class="lead" style="margin:18px 0 6px">채점</p>`;
+
 function gradeBlock(mark, drill) {
-  const head = `<p class="lead" style="margin:18px 0 6px">채점</p>`;
+  const head = GRADE_HEAD;
+  // 받아 둔 채점이 먼저다. 열쇠를 지워도 이미 받아 둔 것은 계속 읽을 수 있다.
+  if (mark.state === "done") return head + gradeBody(mark.grade, drill);
   if (!apiKey()) {
     return `${head}<div class="keyform">
       <p class="k-note">쓴 글을 모델에게 보내서 고칠 곳을 받습니다. 열쇠는 이 기기에만 저장되고, 쓴 글은 채점할 때만 나갑니다.</p>
@@ -387,10 +398,11 @@ function gradeBlock(mark, drill) {
       <button type="button" data-act="grade-writing">다시 받기</button>
       <button type="button" class="ghost-btn" data-act="drop-key">열쇠 지우기</button>`;
   }
-  if (mark.state !== "done") {
-    return `${head}<button type="button" data-act="grade-writing">채점 받기</button>`;
-  }
-  const g = mark.grade;
+  return `${head}<button type="button" data-act="grade-writing">채점 받기</button>`;
+}
+
+/** 받아 둔 채점 한 벌. 채점 화면과 기록 화면이 같은 모양으로 쓴다. */
+function gradeBody(g, drill) {
   // 먼저 받아 둔 채점에는 고쳐 쓴 글과 다시 쓰기가 없다. 그 자리만 비워 둔다
   const rewrite = g.rewrite
     ? `<p class="lead" style="margin:16px 0 6px">고친 글</p>
@@ -413,7 +425,7 @@ function gradeBlock(mark, drill) {
         .map(esc)
         .join("，")}</span></p>`
     : "";
-  return `${head}
+  return `
     <p class="g-verdict">${esc(g.verdict)}</p>
     ${rewrite}
     ${fixes}
@@ -493,6 +505,37 @@ function modelBlock(item) {
     <p class="answer-zh zh" lang="zh-CN">${esc(item.model).replace(/\n/g, "<br>")}</p>
     <p class="ko-line" style="margin-top:8px">${esc(item.modelKo).replace(/\n/g, "<br>")}</p>
     <ul class="rules" style="margin-top:16px">${item.checklist.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>`;
+}
+
+/**
+ * 받아 둔 작문 채점을 기록 화면에서 다시 읽는다.
+ *
+ * 채점은 받을 때 기기에 적어 둔다. 그런데 그 세트를 지나가면 화면에서 꺼낼 길이
+ * 없었다. 돈을 쓰고 받은 것이 보이지 않는 자리에만 남는다. 여기에 새것부터 늘어놓는다.
+ * 다시 쓰기 칸은 두지 않는다. 여기서 쓴 글은 남는 데가 없다.
+ */
+export function keptGrades(items, graded) {
+  const rows = Object.entries(graded || {})
+    .map(([id, k]) => ({ k, item: items.find((x) => x.id === id) }))
+    .filter((r) => r.item && r.k && r.k.grade)
+    .sort((a, b) => (b.k.at || 0) - (a.k.at || 0));
+  if (!rows.length) return `<p class="empty">받아 둔 작문 채점이 없습니다.</p>`;
+  return rows
+    .map(({ k, item }) => {
+      const d = new Date(k.at || Date.now());
+      return `<div class="ex">
+        <div class="ex-head">
+          <span class="verdict">${d.getMonth() + 1}월 ${d.getDate()}일</span>
+          <span class="counter">${esc(item.topic)}</span>
+        </div>
+        <p class="ko-line">${esc(item.promptKo)}</p>
+        <p class="lead" style="margin:16px 0 6px">내가 쓴 글</p>
+        <p class="answer-zh zh" lang="zh-CN" style="font-size:16px">${esc(k.text || "").replace(/\n/g, "<br>")}</p>
+        ${GRADE_HEAD}
+        ${gradeBody(k.grade, null)}
+      </div>`;
+    })
+    .join("");
 }
 
 export function renderResult(set, ans, flags, view, wrules, mark, notes, drill) {

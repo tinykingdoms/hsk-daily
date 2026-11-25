@@ -4,7 +4,7 @@ import {
 } from "./store.js";
 import { buildDay, rebuildDay, seedSeen } from "./daily.js";
 import { renderDrill, buildView, emptyAnswers, isComplete, countCjk, esc } from "./drill.js";
-import { renderResult, gradeOrder, gradeSequence, gradeCloze } from "./explain.js";
+import { renderResult, keptGrades, gradeOrder, gradeSequence, gradeCloze } from "./explain.js";
 import { gradeWriting, setApiKey, explainGrammar, orderAsk, clozeAsk } from "./writing.js";
 import {
   buildReading, buildReadingView, emptyReadingAnswers, readingComplete,
@@ -453,6 +453,12 @@ function recordView() {
         : `<p class="empty">아직 읽은 지문이 없습니다. 남은 지문은 ${leftReading}편입니다.</p>`
     }
     <div class="row-btns"><button type="button" data-act="open-reading">한 편 읽기</button></div>
+  </section>
+  <section class="block">
+    <div class="block-head"><h2>받아 둔 작문 채점</h2><span class="counter">${
+      Object.keys(state.graded || {}).length
+    }편</span></div>
+    ${keptGrades(data.writing.items, state.graded)}
   </section>
   <section class="block">
     <div class="block-head"><h2>어법별 정답률</h2><span class="counter">어순 문항만</span></div>
