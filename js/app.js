@@ -2,7 +2,7 @@ import {
   load, save, bumpStat, dateKey, markSeen, recordSet, setsToday,
   recordReading, readingToday, readingTotals,
 } from "./store.js";
-import { buildDay, seedSeen } from "./daily.js";
+import { buildDay, rebuildDay, seedSeen } from "./daily.js";
 import { renderDrill, buildView, emptyAnswers, isComplete, countCjk, esc } from "./drill.js";
 import { renderResult, gradeOrder, gradeSequence, gradeCloze } from "./explain.js";
 import { gradeWriting, setApiKey, explainGrammar, orderAsk, clozeAsk } from "./writing.js";
@@ -52,8 +52,67 @@ async function boot() {
     delete state.review;
     save(state);
   }
-  startDay();
+  if (!reopenToday()) startDay();
   keepFresh();
+}
+
+/**
+ * 지금 열어 둔 세트를 기기에 적어 둔다.
+ *
+ * 새로고침하면 답과 채점 화면이 사라진다. 문항 id 와 답을 적어 두면 다시 열 때
+ * 같은 자리로 돌아온다. 보기 차례(view)는 씨앗이 고정이라 적지 않아도 같게 선다.
+ */
+function keepOpen() {
+  if (!set || set.exhausted) {
+    state.open = null;
+  } else {
+    state.open = {
+      id: set.id,
+      key: set.key,
+      nth: set.nth,
+      ids: {
+        sequence: set.sequence.map((s) => s.id),
+        order: set.order.map((it) => it.id),
+        cloze: set.cloze.map((p) => p.id),
+        writing: set.writing ? set.writing.id : null,
+      },
+      ans,
+      drill,
+    };
+  }
+  save(state);
+}
+
+// 글자마다 저장하지는 않는다. 손을 멈추면 적는다.
+let typing = 0;
+function keepOpenSoon() {
+  clearTimeout(typing);
+  typing = setTimeout(keepOpen, 800);
+}
+
+/** 적어 둔 세트가 오늘 것이면 그 자리로 돌아간다. 아니면 오늘 세트를 새로 연다. */
+function reopenToday() {
+  const open = state.open;
+  if (!open || open.key !== dateKey(today())) return false;
+  const s = rebuildDay(data, open);
+  if (!s) return false;
+  set = s;
+  view = buildView(set);
+  // 적어 둔 답이 모자라도 화면은 서야 한다. 빈 답 위에 적어 둔 것을 얹는다.
+  const base = emptyAnswers(set);
+  const was = open.ans || {};
+  ans = {
+    sequence: { ...base.sequence, ...was.sequence },
+    order: { ...base.order, ...was.order },
+    cloze: { ...base.cloze, ...was.cloze },
+    writing: { ...base.writing, ...was.writing },
+  };
+  drill = open.drill || { text: {}, shown: false };
+  // 토요일에 푼 세트로 돌아올 때 주말 안내가 앞을 막지 않게 한다.
+  forceWeekday = true;
+  route = set.id in state.sets ? "result" : "drill";
+  render();
+  return true;
 }
 
 /**
@@ -128,6 +187,7 @@ function startDay() {
   mark = { id: null, state: "idle" };
   note = { id: null, state: "idle", error: "" };
   drill = { text: {}, shown: false };
+  keepOpen();
   render();
 }
 
@@ -157,6 +217,7 @@ async function askGrade() {
     mark = { id: item.id, state: "done", grade };
     // 새 문장이 왔으니 앞 채점에 쓴 답은 지운다
     drill = { text: {}, shown: false };
+    keepOpen();
   } catch (e) {
     mark = { id: item.id, state: "error", error: e.message };
   }
@@ -269,6 +330,7 @@ function render() {
     if (ta) {
       ta.addEventListener("input", () => {
         ans.writing.text = ta.value;
+        keepOpenSoon();
         const n = countCjk(ta.value);
         const c = document.getElementById("wcount");
         c.textContent = `${n} / ${set.writing.minChars}字`;
@@ -313,8 +375,8 @@ function grade() {
     );
   }
   recordSet(state, set.id, set.key, got, set.total);
-  save(state);
   route = "result";
+  keepOpen();
   render();
 }
 
@@ -516,6 +578,7 @@ main.addEventListener("click", (e) => {
       return;
     }
   }
+  keepOpen();
   render();
 });
 
@@ -524,6 +587,7 @@ main.addEventListener("input", (e) => {
   const box = e.target.closest("[data-drill]");
   if (!box) return;
   drill.text[box.dataset.drill] = box.value;
+  keepOpenSoon();
 });
 
 function copy(text, btn) {

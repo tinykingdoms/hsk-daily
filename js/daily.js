@@ -105,6 +105,46 @@ export function buildDay(data, state, now = new Date(), n = 0) {
 }
 
 /**
+ * 적어 둔 id 로 세트를 다시 세운다.
+ *
+ * buildDay 는 아직 안 낸 문항만 꺼낸다. 채점하면 그 문항은 본 것이 되니까,
+ * 새로고침하면 같은 세트가 다시 서지 않고 채점 화면도 사라졌다. 풀던 세트의
+ * id 를 적어 두고 여기서 같은 문항을 다시 찾는다.
+ *
+ * 문항이 하나라도 없으면 null 을 돌린다. 문항 파일에서 지운 것이 있으면
+ * 반쪽짜리 세트를 세우는 것보다 새 세트를 여는 쪽이 낫다.
+ */
+export function rebuildDay(data, open) {
+  const ids = (open && open.ids) || {};
+  const pick = (list, want) => {
+    const out = (want || []).map((id) => byId(list, id));
+    return out.length && out.every(Boolean) ? out : null;
+  };
+  const sequence = pick(data.sequence.sets, ids.sequence);
+  const order = pick(data.order.items, ids.order);
+  const cloze = pick(data.cloze.passages, ids.cloze);
+  if (!sequence || !order || !cloze) return null;
+  const writing = ids.writing ? byId(data.writing.items, ids.writing) : null;
+  if (ids.writing && !writing) return null;
+
+  const [y, m, d] = String(open.key).split("-").map(Number);
+  const set = {
+    key: open.key,
+    id: open.id,
+    nth: open.nth,
+    weekend: isWeekend(new Date(y, m - 1, d)),
+    sequence,
+    order,
+    cloze,
+    writing,
+    exhausted: false,
+  };
+  set.total =
+    5 * set.sequence.length + set.order.length + set.cloze.reduce((s, p) => s + p.blanks.length, 0);
+  return set;
+}
+
+/**
  * 예전 기록에는 어떤 문항을 봤는지가 없다. 그때 쓰던 규칙을 되돌려서 채운다.
  *
  * 예전에는 EPOCH(2026-11-09 월요일)부터 센 평일 번호로 문항을 골랐다.

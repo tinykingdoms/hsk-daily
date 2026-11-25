@@ -11,6 +11,8 @@ const blank = () => ({
   graded: {},
   // 받아 둔 어법 설명. 같은 문항에 두 번 돈을 쓰지 않는다
   notes: {},
+  // 지금 열어 둔 세트. 새로고침해도 풀던 자리와 채점 화면으로 돌아온다
+  open: null,
 });
 
 export function load() {
