@@ -65,15 +65,21 @@ function noteArea(id, notes, flagged, wrong) {
   let body = "";
   let btn = "";
   if (wrong && kept) {
+    // 예문이 안 올 수도 있다. 개수는 모델에게 말로 시키고 스키마로 묶지 않는다.
+    const ex = kept.examples || [];
     body = `<div class="n-box">
       <p class="keep-head">어법</p>
-      ${kept.lines.map((l) => `<p class="n-line">${esc(l)}</p>`).join("")}
-      <ul class="n-ex">${kept.examples
-        .map(
-          (e) =>
-            `<li><span class="zh" lang="zh-CN">${esc(e.zh)}</span><span class="k-ko">${esc(e.ko)}</span></li>`
-        )
-        .join("")}</ul>
+      ${(kept.lines || []).map((l) => `<p class="n-line">${esc(l)}</p>`).join("")}
+      ${
+        ex.length
+          ? `<ul class="n-ex">${ex
+              .map(
+                (e) =>
+                  `<li><span class="zh" lang="zh-CN">${esc(e.zh)}</span><span class="k-ko">${esc(e.ko)}</span></li>`
+              )
+              .join("")}</ul>`
+          : ""
+      }
     </div>`;
   } else if (wrong && live === "busy") {
     body = `<p class="n-wait">어법 설명을 받고 있습니다.</p>`;

@@ -224,6 +224,8 @@ export function setApiKey(v) {
 }
 
 // 돌아오는 모양을 고정해 둔다. 줄글로 받으면 화면에 붙일 때마다 다르게 끊긴다.
+// 몇 개를 받을지는 여기에 적지 않는다. API 가 minItems 2 이상을 받지 않아서 400 이 돌아온다.
+// 개수는 지시문으로 말하고, 더 와도 아래에서 잘라 쓴다.
 const SCHEMA = {
   type: "object",
   properties: {
@@ -231,7 +233,6 @@ const SCHEMA = {
     rewrite: { type: "string" },
     fixes: {
       type: "array",
-      maxItems: 3,
       items: {
         type: "object",
         properties: {
@@ -243,7 +244,7 @@ const SCHEMA = {
         additionalProperties: false,
       },
     },
-    content: { type: "array", maxItems: 2, items: { type: "string" } },
+    content: { type: "array", items: { type: "string" } },
     drill: {
       type: "object",
       properties: {
@@ -251,8 +252,6 @@ const SCHEMA = {
         why: { type: "string" },
         items: {
           type: "array",
-          minItems: 3,
-          maxItems: 3,
           items: {
             type: "object",
             properties: {
@@ -420,11 +419,9 @@ export async function gradeWriting(item, text) {
 const NOTE_SCHEMA = {
   type: "object",
   properties: {
-    lines: { type: "array", minItems: 2, maxItems: 2, items: { type: "string" } },
+    lines: { type: "array", items: { type: "string" } },
     examples: {
       type: "array",
-      minItems: 2,
-      maxItems: 2,
       items: {
         type: "object",
         properties: { zh: { type: "string" }, ko: { type: "string" } },
@@ -458,8 +455,11 @@ examples 에 적을 것
 /** 어법 설명을 받는다. 채점하는 것이 없어서 틀릴 자리가 없다. */
 export async function explainGrammar(ask) {
   const out = await askModel(NOTE_SYSTEM, ask, NOTE_SCHEMA, "low");
+  const lines = (out.lines || []).filter(Boolean).slice(0, 2);
+  // 빈 설명을 붙여 두면 다시 받을 수도 없다. 아무것도 안 왔으면 오류로 돌린다.
+  if (!lines.length) throw new Error("설명이 비어서 왔습니다. 다시 받아 보세요.");
   return {
-    lines: (out.lines || []).filter(Boolean).slice(0, 2),
+    lines,
     examples: (out.examples || []).filter((e) => e && e.zh && e.ko).slice(0, 2),
   };
 }
